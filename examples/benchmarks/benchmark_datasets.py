@@ -130,7 +130,8 @@ def nmnist(batch_size=256, dt=1e-3, steps_per_dt=1, ds=1, n_events_attention=100
     output_size = 10
     return dataloader_train, dataloader_test, None, input_size, output_size
 
-def double_nmnist(num_ways=5,
+def double_nmnist(num_tasks=32,
+                  num_ways=5,
                   num_shots=1,
                   num_shots_test=5,
                   dt=1e-3,
@@ -139,7 +140,7 @@ def double_nmnist(num_ways=5,
                   seqlen_train=100,
                   seqlen_test=100,
                   num_workers=8,
-                  root="./data",
+                  root="./data/nmnist/n_mnist.hdf5",
                   **dl_kwargs):
 
     '''
@@ -166,14 +167,17 @@ def double_nmnist(num_ways=5,
     '''
     from torchneuromorphic.doublenmnist_torchmeta.doublenmnist_dataloaders import DoubleNMNIST,Compose,ClassNMNISTDataset,CropDims,Downsample,ToCountFrame,ToTensor,ToEventSum,Repeat,toOneHot
     from torchmeta.transforms import ClassSplitter, Categorical, Rotation
+    from torchmeta.utils.data import BatchMetaDataLoader
 
     bin_size_train = seqlen_train//steps_per_dt
     bin_size_test = seqlen_test//steps_per_dt
+
+    batch_size = num_ways
     
     ds = 2
     transform = None
     target_transform = None
-    input_size = [2, 32//ds, 32//ds]
+    input_size = [2, 2*(32//ds), 32//ds]
         
     num_ways_train = num_ways
     num_ways_val = num_ways
@@ -182,13 +186,13 @@ def double_nmnist(num_ways=5,
         
     transform_train = Compose([
         CropDims(low_crop=[0,0], high_crop=[32,32], dims=[2,3]),
-        Downsample(factor=[dt*1e6,1,ds,ds]),
+        Downsample(factor=[int(dt*1e6),1,ds,ds]),
         ToCountFrame(T = bin_size_train, size = input_size),
         ToTensor()])
 
     transform_test = Compose([
         CropDims(low_crop=[0,0], high_crop=[32,32], dims=[2,3]),
-        Downsample(factor=[dt*1e6,1,ds,ds]),
+        Downsample(factor=[int(dt*1e6),1,ds,ds]),
         ToCountFrame(T = bin_size_test, size = input_size),
         ToTensor()])
     
@@ -220,8 +224,22 @@ def double_nmnist(num_ways=5,
                                       num_train_per_class = num_shots, 
                                       num_test_per_class = num_shots_test)
     
-    
-    return meta_train_dataset, meta_test_dataset, meta_val_dataset, input_size, num_ways
+    meta_train_dataloader = BatchMetaDataLoader(meta_train_dataset,
+                                        batch_size=batch_size,
+                                        shuffle=True,
+                                        pin_memory=True, **dl_kwargs)
+
+    meta_test_dataloader = BatchMetaDataLoader(meta_test_dataset,
+                                      batch_size=batch_size,
+                                      shuffle=True,
+                                      pin_memory=True, **dl_kwargs)
+
+    meta_val_dataloader = BatchMetaDataLoader(meta_val_dataset,
+                                      batch_size=batch_size,
+                                      shuffle=True,
+                                      pin_memory=True, **dl_kwargs)
+
+    return meta_train_dataloader, meta_test_dataloader, meta_val_dataloader, input_size, num_ways
 
 
 
