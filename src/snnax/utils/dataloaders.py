@@ -1,3 +1,18 @@
+#!/bin/python
+#-----------------------------------------------------------------------------
+# File Name : 
+# Author: Jamie Lohoff, Jan Finkbeiner, Emre Neftci
+#
+# Creation Date : Sun 21 Apr 2024 10:16:53 AM CEST
+# Last Modified : Sun 21 Apr 2024 10:32:00 AM CEST
+#
+# Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
+# Licence : GPLv2
+#----------------------------------------------------------------------------- 
+'''
+This is a simple implementation of a dataloader for jax, with a design similar to pytorch dataloader
+'''
+
 from typing import Any, Callable, Iterable, Sequence, Dict
 
 import numpy as np
@@ -7,8 +22,6 @@ import math
 import queue
 from itertools import cycle
 from multiprocessing import Process, Queue
-
-# Design relatively similar to pytorch dataloader
 
 def default_collate(batch):
     """
@@ -23,7 +36,7 @@ def default_collate(batch):
 
 class AbstractDataLoader(object):
     """
-    TODO abstract class definition for compatibility
+    Abstract class definition for compatibility
     and to avoid boilerplate code
     """
     dataset: Any
@@ -52,6 +65,17 @@ class AbstractDataLoader(object):
                 shuffle: bool = True,
                 **kwargs
                 ) -> None:
+
+        """
+        **Arguments:**
+        dataset: Any, the dataset to be loaded
+        batch_size: int, default is 1
+        collate_fn: Callable, default is default_collate which stacks numpy arrays
+        drop_last: bool, default is False, if True the last batch will be dropped if it is smaller than batch_size
+        shuffle: bool, default is True, if True the dataset is shuffled
+        **kwargs: additional arguments passed to the dataloader (not used in abstract class)
+
+        """
         self.dataset = dataset
         self.batch_size = batch_size
         self.prefetch_batches = prefetch_batches
@@ -84,7 +108,8 @@ class AbstractDataLoader(object):
 
     def __next__(self) -> Any:
         """
-        TODO add documentation
+        Returns the next batch of data.
+        Arguments:
         """
         if self._state >= self._length:
             raise StopIteration
@@ -103,7 +128,7 @@ class AbstractDataLoader(object):
 
 class SimpleDataLoader(AbstractDataLoader):
     """
-    TODO add documentation
+    Simple dataloader implementation without multiprocessing
     """
     def __init__(self,
                 dataset: Any, *,
@@ -113,6 +138,7 @@ class SimpleDataLoader(AbstractDataLoader):
                 shuffle: bool = True,
                 **kwargs
                 ) -> None:
+
 
         super().__init__(dataset, 
                         batch_size=batch_size,
@@ -126,7 +152,7 @@ class SimpleDataLoader(AbstractDataLoader):
 
     def get(self) -> Any:
         """
-        TODO add documentation
+        Returns the next item in the dataset, increments the state
         """
         idx = self.indexes[self._state]
         item = self.dataset[idx]
@@ -136,11 +162,10 @@ class SimpleDataLoader(AbstractDataLoader):
 
 def worker_fn(dataset, index_queue, output_queue) -> None:
     """
-    TODO add documentation
+    Worker function, simply reads indices from state_queue, and adds the
+    dataset element to the output_queue
     """
     while True:
-        # Worker function, simply reads indices from state_queue, and adds the
-        # dataset element to the output_queue
         try:
             index = index_queue.get(timeout=0)
         except queue.Empty:
@@ -152,7 +177,7 @@ def worker_fn(dataset, index_queue, output_queue) -> None:
 
 class DataLoader(AbstractDataLoader):
     """
-    TODO add documentation
+    Dataloader with multiprocessing
     """
     output_queue: Queue
     index_queues: Sequence[Queue]
@@ -169,6 +194,17 @@ class DataLoader(AbstractDataLoader):
                 shuffle: bool = True,
                 **kwargs
                 ) -> None:
+        """
+        **Arguments:**
+        dataset: Any, the dataset to be loaded
+        batch_size: int, default is 1
+        collate_fn: Callable, default is default_collate which stacks numpy arrays
+        drop_last: bool, default is False, if True the last batch will be dropped if it is smaller than batch_size
+        shuffle: bool, default is True, if True the dataset is shuffled
+        num_workers: int, default is 1, number of worker processes
+        prefetch_batches: int, default is 2, number of batches to prefetch
+        **kwargs: additional arguments passed to the dataloader
+        """
 
         super().__init__(dataset, 
                         batch_size=batch_size,
@@ -196,7 +232,7 @@ class DataLoader(AbstractDataLoader):
 
     def prefetch(self) -> None:
         """
-        TODO add documentation
+        Prefetches the next batch of data
         """
         while (self._prefetch_state < self._length and 
                 self._prefetch_state < self._state + self.prefetch_batches * self.num_workers * self.batch_size):
@@ -208,7 +244,7 @@ class DataLoader(AbstractDataLoader):
 
     def get(self) -> Any:
         """
-        TODO add documentation
+        Returns the next item in the dataset, increments the state
         """
         self.prefetch()
         idx = self.indexes[self._state]
@@ -232,7 +268,7 @@ class DataLoader(AbstractDataLoader):
 
     def __del__(self) -> None:
         """
-        Function for cleanup 
+        Function for cleanup, closes the queues and terminates the workers
         """
         try:
             for i, worker in enumerate(self.workers):
