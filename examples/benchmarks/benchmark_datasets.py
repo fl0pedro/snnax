@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Thu 01 Jun 2023 01:05:51 PM CEST
-# Last Modified : Sun 21 Apr 2024 10:53:57 AM CEST
+# Last Modified : Mon 22 Apr 2024 12:19:19 PM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
@@ -22,7 +22,7 @@ The functions should have the following signature:
 Note that batch_size argumetn may not be necessary in certain datasets
 '''
 
-def dvs_gestures(batch_size=72, dt=1e-3, steps_per_dt=None, ds=4, n_events_attention=None, seqlen_train=500, seqlen_test=1800, num_workers=8, root="./data", **dl_kwargs):
+def dvs_gestures(batch_size=72, dt=1e-3, steps_per_dt = None, ds=4, n_events_attention=None, seqlen_train=500, seqlen_test=1800, num_workers=8, root="./data", **dl_kwargs):
     '''
     This function returns the dataloaders for the DVS Gestures dataset, using the torchneuromorphic library. 
     The dataset is described in:
@@ -81,7 +81,7 @@ def dvs_gestures_attn(n_events_attention=1000, *args, **kwargs):
     '''
     return dvs_gestures(n_events_attention=n_events_attention, *args, **kwargs)
 
-def nmnist(batch_size=256, dt=1e-3, steps_per_dt=1, ds=1, n_events_attention=1000, seqlen_train=300, seqlen_test=300, num_workers=8, root="./data", **dl_kwargs):
+def nmnist(batch_size=256, dt=1e-3, steps_per_dt = None, ds=1, n_events_attention=None, seqlen_train=300, seqlen_test=300, num_workers=8, root="./data/nmnist/n_mnist.hdf5", **dl_kwargs):
     '''
     This function returns the dataloaders for the NMNIST dataset, using the torchneuromorphic library.
 
@@ -97,6 +97,13 @@ def nmnist(batch_size=256, dt=1e-3, steps_per_dt=1, ds=1, n_events_attention=100
     - root: str, the root directory for the dataset
     - dl_kwargs: dict, additional keyword arguments for the neuromorphic dataloaders (as using in the torchneuromorphic library)
     '''
+
+    if steps_per_dt is None:
+        steps_per_dt = int(dt*1e3)
+
+    if n_events_attention is not None:
+        print('using attention')
+
     if seqlen_train > 300:
         seq_len_train = 300
         warnings.warn('seqlen_train > 300, setting to 300')
@@ -135,10 +142,10 @@ def double_nmnist(num_tasks=32,
                   num_shots=1,
                   num_shots_test=5,
                   dt=1e-3,
-                  steps_per_dt=1,
+                  steps_per_dt=None,
                   ds=2,
-                  seqlen_train=100,
-                  seqlen_test=100,
+                  seqlen_train=300,
+                  seqlen_test=300,
                   num_workers=8,
                   root="./data/nmnist/n_mnist.hdf5",
                   **dl_kwargs):
@@ -165,9 +172,12 @@ def double_nmnist(num_tasks=32,
     - dl_kwargs: dict, additional keyword arguments for the neuromorphic dataloaders (as using in the torchneuromorphic library)
 
     '''
-    from torchneuromorphic.doublenmnist_torchmeta.doublenmnist_dataloaders import DoubleNMNIST,Compose,ClassNMNISTDataset,CropDims,Downsample,ToCountFrame,ToTensor,ToEventSum,Repeat,toOneHot
+    from torchneuromorphic.doublenmnist_torchmeta.doublenmnist_dataloaders import DoubleNMNIST,Compose,ClassNMNISTDataset,CropDims,Downsample,ToCountFrame,ToTensor,ToEventSum,Repeat,toOneHot, ToJNPTensor
     from torchmeta.transforms import ClassSplitter, Categorical, Rotation
     from torchmeta.utils.data import BatchMetaDataLoader
+
+    if steps_per_dt is None:
+        steps_per_dt = int(dt*1e3)
 
     bin_size_train = seqlen_train//steps_per_dt
     bin_size_test = seqlen_test//steps_per_dt
@@ -177,7 +187,8 @@ def double_nmnist(num_tasks=32,
     ds = 2
     transform = None
     target_transform = None
-    input_size = [2, 2*(32//ds), 32//ds]
+    input_size = [2, (32//ds), (32//ds)]
+    output_size = [2, 2*(32//ds), (32//ds)]
         
     num_ways_train = num_ways
     num_ways_val = num_ways
@@ -195,10 +206,10 @@ def double_nmnist(num_tasks=32,
         Downsample(factor=[int(dt*1e6),1,ds,ds]),
         ToCountFrame(T = bin_size_test, size = input_size),
         ToTensor()])
-    
-    
+   
     meta_train_dataset = ClassSplitter(DoubleNMNIST(root = root,
                                                     meta_train=True,
+                                                    dt=int(dt*1e6),
                                                     transform = transform_train,
                                                     target_transform = Categorical(num_ways),
                                                     chunk_size=bin_size_train,
@@ -208,6 +219,7 @@ def double_nmnist(num_tasks=32,
     
     meta_val_dataset = ClassSplitter(DoubleNMNIST(root = root,
                                                   meta_val=True,
+                                                  dt=int(dt*1e6),
                                                   transform = transform_test,
                                                   target_transform = Categorical(num_ways_test),
                                                   chunk_size=bin_size_test,
@@ -217,6 +229,7 @@ def double_nmnist(num_tasks=32,
     
     meta_test_dataset = ClassSplitter(DoubleNMNIST(root = root,
                                                    meta_test=True,
+                                                   dt=int(dt*1e6),
                                                    transform = transform_test,
                                                    target_transform = Categorical(num_ways_val),
                                                    chunk_size=bin_size_test,
@@ -239,7 +252,7 @@ def double_nmnist(num_tasks=32,
                                       shuffle=True,
                                       pin_memory=True, **dl_kwargs)
 
-    return meta_train_dataloader, meta_test_dataloader, meta_val_dataloader, input_size, num_ways
+    return meta_train_dataloader, meta_test_dataloader, meta_val_dataloader, output_size, num_ways
 
 
 
