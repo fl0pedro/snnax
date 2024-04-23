@@ -143,7 +143,7 @@ class LIF(StatefulLayer):
         if shape is None:
             self.decay_constants = TrainableArray(decay_constants)
         else:
-            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=[len(decay_constants)]+shape, key=key)
+            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=[len(decay_constants)]+list(shape), key=key)
             self.decay_constants = TrainableArray(_arr)
 
 
