@@ -189,7 +189,7 @@ class LIFSoftReset(LIF):
         state = [mem_pot, syn_curr, spike_output]
         return [state, spike_output]
 
-class AdaptiveExponentialLIF(StatefulLayer):
+class AdaptiveLIF(StatefulLayer):
     """
     Implementation of a adaptive exponential leaky integrate-and-fire neuron
     as presented in https://neuronaldynamics.epfl.ch/online/Ch6.S1.html.
@@ -204,10 +204,10 @@ class AdaptiveExponentialLIF(StatefulLayer):
     reset_val: Optional[float] = static_field()
 
     def __init__(self,
-                decay_constant: float,
-                ada_decay_constant: float,
-                ada_step_val: float,
-                ada_coupling_var: float,
+                decay_constants: float,
+                ada_decay_constant: float = .95 ,
+                ada_step_val: float = 1.0,
+                ada_coupling_var: float = .5,
                 spike_fn: Callable = superspike_surrogate(10.),
                 threshold: float = 1.,
                 stop_reset_grad: bool = True,
@@ -231,7 +231,7 @@ class AdaptiveExponentialLIF(StatefulLayer):
 
         # TODO assert for numerical stability 0.999 leads to errors...
         self.threshold = threshold
-        self.decay_constant = decay_constant
+        self.decay_constants = decay_constants
         self.spike_fn = spike_fn
         self.reset_val = reset_val if reset_val is not None else None
         self.stop_reset_grad = stop_reset_grad
@@ -246,10 +246,9 @@ class AdaptiveExponentialLIF(StatefulLayer):
                     *args, 
                     **kwargs) -> Sequence[Array]:
         init_state_mem_pot = self.init_fn(shape, key, *args, **kwargs)
-        init_state_ada = jnp.zeros(shape, key)
-        init_state_spikes = jnpzeros(shape, key)
-        init_state = jnp.concatenate([init_state_mem_pot, init_state_ada, init_state_spikes])
-        return init_state
+        init_state_ada = jnp.zeros(shape)
+        init_state_spikes = jnp.zeros(shape)
+        return [init_state_mem_pot, init_state_ada, init_state_spikes]
 
     def __call__(self, 
                 state: Sequence[Array], 
@@ -257,7 +256,7 @@ class AdaptiveExponentialLIF(StatefulLayer):
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
         mem_pot, ada_var = state[0], state[1]
 
-        alpha = self.decay_constant
+        alpha = self.decay_constants[0]
 
         # Calculation of the membrane potential
         mem_pot = alpha*mem_pot + (synaptic_input+ada_var)
@@ -265,7 +264,7 @@ class AdaptiveExponentialLIF(StatefulLayer):
         spike_output = self.spike_fn(mem_pot - self.threshold)
         
         # Calculation of the adaptive part of the dynamics
-        ada_var = (1.-self.ada_decay_constant)*self.ada_coupling_var \
+        ada_var_new = (1.-self.ada_decay_constant)*self.ada_coupling_var \
                 * (mem_pot-self.threshold) \
                 + self.ada_decay_constant*ada_var \
                 - self.ada_step_val*lax.stop_gradient(spike_output)
@@ -280,6 +279,6 @@ class AdaptiveExponentialLIF(StatefulLayer):
         mem_pot = mem_pot - refectory_pot
 
         # state = (membrane_potential_new, ada_var_new)
-        state = jnp.concatenate([mem_pot, ada_var_new, spike_output])
+        state = [mem_pot, ada_var_new, spike_output]
         return [state, spike_output]
 
