@@ -127,9 +127,47 @@ def shd(batch_size=72, dt=1e-3, steps_per_dt=None, ds=4, n_events_attention=None
                                                                 drop_last = True,
                                                                 root=root,
                                                                 **dl_kwargs)
-    input_size = (70, 1, 1)
+    #input_size = (70, 1, 1)
+    input_size = [700, 1]
     output_size = 20
     return dataloader_train, dataloader_test, None, input_size, output_size
+
+def shd_tonic(batch_size=72, delta_t=10000, dt=1e-3, steps_per_dt=None, ds=4, n_events_attention=None, seqlen_train=500, seqlen_test=1800, num_workers=8, root="./data", **dl_kwargs):
+
+    import tonic
+    from torch.utils.data import DataLoader
+    import tonic.transforms as transforms
+
+    # Define a transform
+    sensor_size = tonic.datasets.SHD.sensor_size
+
+    transforms_list = []
+    transforms_list.extend([
+        transforms.ToFrame(sensor_size, time_window=delta_t),
+        lambda x: x.reshape(x.shape[0], -1)
+    ])
+    transform_train = transforms.Compose(transforms_list)
+
+    # create datasets
+    datasets_folder = "./fdata/"
+    train_ds = tonic.datasets.SHD(
+        datasets_folder, train=True, transform=transform_train)
+    test_ds = tonic.datasets.SHD(
+        datasets_folder, train=False, transform=transform_train)
+
+    # create dataloaders
+    train_loader = DataLoader(train_ds,
+                              shuffle=True,
+                              batch_size=batch_size,
+                              num_workers=4,
+                              collate_fn=tonic.collation.PadTensors(batch_first=True))
+    test_loader = DataLoader(test_ds,
+                             shuffle=True,
+                             batch_size=batch_size,
+                             num_workers=4,
+                             collate_fn=tonic.collation.PadTensors(batch_first=True))
+
+    return train_loader, test_loader, None, [700], 20
 
 def nmnist(batch_size=256, dt=1e-3, steps_per_dt = None, ds=1, n_events_attention=None, seqlen_train=300, seqlen_test=300, num_workers=8, root="./data/nmnist/n_mnist.hdf5", **dl_kwargs):
     '''
