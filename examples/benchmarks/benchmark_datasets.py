@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Thu 01 Jun 2023 01:05:51 PM CEST
-# Last Modified : Mon 22 Apr 2024 12:19:19 PM CEST
+# Last Modified : Wed 24 Apr 2024 07:40:57 AM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
@@ -343,4 +343,11 @@ def double_nmnist(num_tasks=32,
     return meta_train_dataloader, meta_test_dataloader, meta_val_dataloader, output_size, num_ways
 
 
+def heidelberg_spoken_digits(batch_size, dt=1e-3, steps_per_dt = None, ds=1, num_workers=8, root="./data/SHD/", **dl_kwargs):
+    if steps_per_dt is None:
+        steps_per_dt = ds = int(dt*1e3) 
+    from custom_datasets.datasets_bittar_garner_hd_sc import load_hd_or_sc
+    dt_tr = load_hd_or_sc('hd','data/SHD','train', batch_size=batch_size, ds=ds, workers=num_workers)
+    dt_te = load_hd_or_sc('hd','data/SHD','test', batch_size=batch_size, ds=ds, workers=num_workers)
+    return dt_tr, dt_te, None, [40], 20
 

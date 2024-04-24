@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Tue 28 Mar 2023 12:44:33 PM CEST
-# Last Modified : Fri 19 Apr 2024 12:01:55 PM CEST
+# Last Modified : Tue 23 Apr 2024 09:11:02 PM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
@@ -32,7 +32,7 @@ class SNNMLP(eqx.Module):
                  size_factor: float = 4,
                  ro_int: int = -1,
                  burnin: int = 20,
-                 norm: bool = False,
+                 norm: bool = True,
                  num_hid_layers: int = 1,
                  use_bias: bool = True,
                  neuron_model: str = 'snnax.snn.LIFSoftReset',
@@ -71,27 +71,37 @@ class SNNMLP(eqx.Module):
                          norm = norm, num_hid_layers=num_hid_layers),
             forward_fn = snn.architecture.default_forward_fn) # Remove debug_forward_fn for speed
 
-    def __call__(self, x, key=None):
-        state, out = self.get_final_states(x, key)
-        return self.multiloss(out)
+    def __call__(self, x, key=None, seqlen=None):
+        if seqlen is not None:
+            assert self.ro_int is None, "readout interval not yet supported with seqlen"
+            return self.get_final_states(x, key, seqlen)[-1]
+        else:    
+            state, out = self.get_final_states(x, key, seqlen)
+            return self.multiloss(out)
         
     def multiloss(self, out):
-        if self.ro_int == -1:
+        if self.ro_int is None:
+            return out[-1][-1]
+        elif self.ro_int == -1:
             ro = out[-1].shape[0]
+            return out[-1][::-ro]
         else:
             ro = np.minimum(self.ro_int, out[-1].shape[0])
-        return out[-1][::-ro]
+            return out[-1][::-ro]
 
     def embed(self, x, key):
         state = self.cell.init_state(x[0,:].shape, key)
         state, out = self.cell(state, x, key, burnin=self.burnin)
         return out[-1][-1]
     
-    def get_final_states(self, x, key):
+    def get_final_states(self, x, key, seqlen=None):
         state = self.cell.init_state(x[0,:].shape, key)
 
         states, out = self.cell(state, x, key, burnin=self.burnin)
-        return states, out
+        if seqlen is None:
+            return states, out
+        else:
+            return states, out[-1][seqlen-self.burnin,:]
 
 def make_layers(in_channels, hid_channels, out_channels, key, neuron_model, size_factor=1, use_bias=True, num_hid_layers=2, alpha=0.95, beta=.85, norm=False):
     surr = sr(beta = 10.0)
@@ -102,7 +112,12 @@ def make_layers(in_channels, hid_channels, out_channels, key, neuron_model, size
         m.append(eqx.nn.Linear(in_channels, hid_channels*size_factor, key=init_key, use_bias=use_bias))
         if norm:
             m.append(eqx.nn.LayerNorm(shape=[hid_channels*size_factor],elementwise_affine=False, eps=1e-4))
-        m.append(neuron_model([alpha,beta], spike_fn=surr, reset_val=1))
+        m.append(neuron_model(decay_constants = [alpha,beta], 
+                              spike_fn=surr, 
+                              reset_val=1,
+                              shape=[hid_channels*size_factor],
+                              key=init_key
+                              ))
         layers += m
         in_channels = hid_channels*size_factor
 
@@ -112,33 +127,25 @@ def make_layers(in_channels, hid_channels, out_channels, key, neuron_model, size
 
 def _model_init(model):
     ## Custom code ensures that only  conv layers are trained
-    from snnax.snn.layers.stateful import StatefulLayer
     import jax.tree_util as jtu
+    from utils import apply_to_tree_leaf_bytype,apply_to_tree_leaf
 
     filter_spec = jtu.tree_map(lambda _: False, model)
 
-    # trainable_layers = [i for i, layer in enumerate(model.cell.layers) if hasattr(layer, 'weight')]
-    ## or  isinstance(layer, eqx.nn.LayerNorm)
-    trainable_layers = [i for i, layer in enumerate(model.cell.layers) if isinstance(layer, eqx.nn.Linear)]
-
-    for idx in trainable_layers:
-        if model.cell.layers[idx].bias is not None:
-            filter_spec = eqx.tree_at(
-                lambda tree: (tree.cell.layers[idx].weight, tree.cell.layers[idx].bias),
-                filter_spec,
-                replace=(True,True),
-            )
-        else:
-            filter_spec = eqx.tree_at(
-                lambda tree: tree.cell.layers[idx].weight ,
-                filter_spec,
-                replace=True,
-            )
-
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.Conv2d, 'weight', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.Conv2d, 'bias', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.Linear, 'weight', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.Linear, 'bias', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.LayerNorm, 'weight', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.LayerNorm, 'bias', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.GroupNorm, 'weight', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.GroupNorm, 'bias', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, 'requires_grad', 'data', lambda _: True)
+    
     return model, filter_spec
 
-def snn_mlp(in_channels=2*32*32, out_channels=10, key = jax.random.PRNGKey(0), **kwargs):
-    return _model_init(SNNMLP(in_channels = in_channels, out_channels=out_channels, key = key, **kwargs))
+def snn_mlp(input_size=[2,32,32], out_channels=10, key = jax.random.PRNGKey(0), **kwargs):
+    return _model_init(SNNMLP(in_channels = np.prod(input_size), out_channels=out_channels, key = key, **kwargs))
 
 
 if __name__ == "__main__":

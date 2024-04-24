@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : 
-# Last Modified : Fri 19 Apr 2024 10:36:51 AM CEST
+# Last Modified : Tue 23 Apr 2024 07:40:39 PM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
@@ -29,6 +29,17 @@ import wandb
 import tqdm
 import yaml 
 
+class ParseKwargs(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, dict())
+        for value in values:
+            key, value = value.split('=')
+            try:
+                value = eval(value)
+            except:
+                pass
+            getattr(namespace, self.dest)[key] = value
+
 parser = argparse.ArgumentParser(description='Train model (-m) on dataset (-d) with config (-c) and functions (-l)')
 parser.add_argument('-c','--config', default='parameters/config_default.yaml', help='YAML config file')
 parser.add_argument('-m','--model', help='model path', required=True)
@@ -40,11 +51,20 @@ parser.add_argument('-l','--funcs', default='utils.create_cls_func_xent', help='
 parser.add_argument('-t','--notesteval', help='disable run', action='store_true')
 parser.add_argument('-u','--notraineval', help='disable run', action='store_true')
 parser.add_argument('-e','--seed', help='seed', default=0)
-parser.add_argument('-r','--train_iter_reset', help='reset training iterator', action='store_true')
+parser.add_argument('-r','--train_iter_noreset', help='no reset training iterator', default=True, action='store_false')
+parser.add_argument('--kwargs', nargs='*', action=ParseKwargs)
+parser.add_argument('--model_kwargs', nargs='*', action=ParseKwargs)
+parser.add_argument('--dataset_kwargs', nargs='*', action=ParseKwargs)
+parser.add_argument('--optim_kwargs', nargs='*', action=ParseKwargs)
 args = vars(parser.parse_args())
 
 
 config = yaml.safe_load(open(args['config']))
+if args['kwargs'] is not None: config.update(args['kwargs'])
+if args['model_kwargs'] is not None: config['model_kwargs'].update(args['model_kwargs'])
+if args['optim_kwargs'] is not None: config['optim_kwargs'].update(args['optim_kwargs'])
+if args['dataset_kwargs'] is not None: config['dataset_kwargs'].update(args['dataset_kwargs'])
+
 if args['nowb']:
     wandb.init(project=args['dataset'], config=config, mode='disabled')
 else:
@@ -53,18 +73,21 @@ w_c = wandb.config
 
 dt = w_c['dt']
 
+
 ## Datasets
 create_dataloaders = get_method(args['dataset'])
 dataloader_train, dataloader_test, dataloader_val, input_size, output_size = create_dataloaders(dt = dt, **w_c['dataset_kwargs'])
-try:
-    num_train_iters = len(dataloader_train)
-except TypeError:
-    num_train_iters = w_c['num_test_iters']
 
-try:
-    num_test_iters = len(dataloader_test)
-except TypeError:
+
+if hasattr(w_c, 'num_train_iters'):
+    num_train_iters = w_c['num_train_iters']
+else:
+    num_train_iters = len(dataloader_train)
+
+if hasattr(w_c, 'num_test_iters'):
     num_test_iters = w_c['num_test_iters']
+else:
+    num_test_iters = len(dataloader_test)
 
 SEED = int(args['seed'])
 key, model_key = jrandom.split(jrandom.PRNGKey(SEED), 2)
@@ -82,7 +105,7 @@ learning_rate = w_c['optim_kwargs']['learning_rate']
 lr_schedule = optax.warmup_cosine_decay_schedule(
     init_value=learning_rate/5,
     peak_value=learning_rate,
-    warmup_steps=10,
+    warmup_steps=int(num_train_iters),
     decay_steps=int(epochs * num_train_iters),
     end_value=1e-4*learning_rate
 )
@@ -121,7 +144,7 @@ if __name__ == "__main__":
             loss, model, opt_state, grads, updates = make_step(model, datap, opt_state, bkp)
             loss_sum += loss.item()
         
-        if not args['train_iter_reset']: train_iter = iter(dataloader_train)
+        if args['train_iter_noreset']: train_iter = iter(dataloader_train)
 
         wandb.log({'train/loss':loss_sum, "epoch":e})
         wandb.log({'optim/count':opt_state[-1][0].count, "epoch":e})
@@ -138,7 +161,7 @@ if __name__ == "__main__":
                 datap, bkp, key = prepare_data(batch,key,shard)
                 xsp, ysp, *zsp = datap
                 acc_.append(accuracy(model, datap, bkp).item())
-            if not args['train_iter_reset']: train_iter = iter(dataloader_train)
+            if args['train_iter_noreset']: train_iter = iter(dataloader_train)
 
             acc_train = np.array(acc_).mean()
             wandb.log({'acc/train':acc_train, "epoch":e})
