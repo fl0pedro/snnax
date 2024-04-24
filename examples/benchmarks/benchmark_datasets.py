@@ -56,6 +56,7 @@ def dvs_gestures(batch_size=72, dt=1e-3, steps_per_dt=None, ds=4, n_events_atten
                                                                 drop_last = True,
                                                                 root=root,
                                                                 **dl_kwargs)
+
     _, dataloader_test  = create_dataloader.create_dataloader(  chunk_size_train=seqlen_train//steps_per_dt,
                                                                 chunk_size_test=seqlen_test//steps_per_dt,
                                                                 dt=int(dt*1e6), num_workers=num_workers,                                                          
@@ -75,11 +76,60 @@ def dvs_gestures(batch_size=72, dt=1e-3, steps_per_dt=None, ds=4, n_events_atten
     output_size = 11
     return dataloader_train, dataloader_test, None, input_size, output_size
 
+
 def dvs_gestures_attn(n_events_attention=1000, *args, **kwargs):
     '''
     This function is a wrapper for the dvs_gestures function, with the n_events_attention argument set to a default value.
     '''
     return dvs_gestures(n_events_attention=n_events_attention, *args, **kwargs)
+
+def shd(batch_size=72, dt=1e-3, steps_per_dt=None, ds=4, n_events_attention=None, seqlen_train=500, seqlen_test=1800, num_workers=8, root="./data", **dl_kwargs):
+    '''
+    This function returns the dataloaders for the DVS Gestures dataset, using the torchneuromorphic library. 
+    The dataset is described in:
+    "A dataset and benchmark for large-scale event-based gesture recognition"
+
+    **Arguments:**
+    - batch_size: int, the batch size for the dataloaders
+    - dt: float, the time step for the dataset in ms
+    - steps_per_dt: int, the number of steps per dt
+    - ds: int, the spatial downsampling factor for the dataset
+    - n_events_attention: int, the number of events to use for the attention mechanism
+    - seqlen_train: int, the sequence length for the training set
+    - seqlen_test: int, the sequence length for the test set
+    - num_workers: int, the number of workers for the dataloaders
+    - root: str, the root directory for the dataset
+    - dl_kwargs: dict, additional keyword arguments for the neuromorphic dataloaders (as using in the torchneuromorphic library)
+    '''
+    if steps_per_dt is None: steps_per_dt = int(dt*1e3)
+    if n_events_attention is not None:
+        print('using attention')
+
+    import torchneuromorphic.shd.shd_dataloaders as create_dataloader
+    dataloader_train, _ = create_dataloader.create_dataloader(  chunk_size_train=seqlen_train//steps_per_dt,
+                                                                chunk_size_test=seqlen_test//steps_per_dt,
+                                                                dt=int(dt*1e6), num_workers=num_workers,
+                                                                ds=ds,
+                                                                batch_size=batch_size,
+                                                                target_transform_train =  lambda x:x,
+                                                                target_transform_test  =  lambda x:x,
+                                                                drop_last = True,
+                                                                root=root,
+                                                                **dl_kwargs)
+
+    _, dataloader_test  = create_dataloader.create_dataloader(  chunk_size_train=seqlen_train//steps_per_dt,
+                                                                chunk_size_test=seqlen_test//steps_per_dt,
+                                                                dt=int(dt*1e6), num_workers=num_workers,                                                          
+                                                                ds=ds,
+                                                                batch_size = batch_size,
+                                                                target_transform_train =  lambda x:x,
+                                                                target_transform_test  =  lambda x:x, 
+                                                                drop_last = True,
+                                                                root=root,
+                                                                **dl_kwargs)
+    input_size = (70, 1, 1)
+    output_size = 20
+    return dataloader_train, dataloader_test, None, input_size, output_size
 
 def nmnist(batch_size=256, dt=1e-3, steps_per_dt=1, ds=1, n_events_attention=1000, seqlen_train=300, seqlen_test=300, num_workers=8, root="./data", **dl_kwargs):
     '''
