@@ -4,11 +4,19 @@ import jax
 import jax.lax as lax
 import jax.numpy as jnp
 
-from equinox import static_field
+from equinox import static_field, Module
 
 from .stateful import StatefulLayer
 from ...functional.surrogate import superspike_surrogate
 from chex import Array, PRNGKey
+
+class TrainableArray(Module):
+    data: Array
+    requires_grad: bool
+
+    def __init__(self, array):
+        self.data = array
+        self.requires_grad = True
 
 class SimpleLIF(StatefulLayer):
     """
@@ -27,19 +35,22 @@ class SimpleLIF(StatefulLayer):
                     spiking neurons. Defaults to initialization with zeros 
                     if nothing else is provided.
     """
-    decay_constants: Union[Sequence[float], Array] = static_field()
+    decay_constants: Union[Sequence[float], Array, TrainableArray] 
     threshold: float = static_field()
     spike_fn: Callable = static_field()
     stop_reset_grad: bool = static_field()
     reset_val: Optional[float] = static_field()
 
     def __init__(self,
-                decay_constant: float,
+                decay_constant: TrainableArray,
                 spike_fn: Callable = superspike_surrogate(10.),
                 threshold: float = 1.,
                 stop_reset_grad: bool = True,
                 reset_val: Optional[float] = None,
-                init_fn: Optional[Callable] = None) -> None:
+                init_fn: Optional[Callable] = None,
+                shape: Union[Sequence[int],int,None] = None,
+                key: PRNGKey = jax.random.PRNGKey(0),
+                ) -> None:
 
         super().__init__(init_fn)
         # TODO assert for numerical stability 0.999 leads to errors...
@@ -48,12 +59,18 @@ class SimpleLIF(StatefulLayer):
         self.spike_fn = spike_fn
         self.reset_val = reset_val if reset_val is not None else None
         self.stop_reset_grad = stop_reset_grad
-            
+
+        if shape is None:
+            self.decay_constant = TrainableArray(decay_constants)
+        else:
+            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=shape, key=key)
+            self.decay_constants = TrainableArray(_arr)
+
     def __call__(self, 
                 state: Array, 
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
-        alpha = self.decay_constant
+        alpha = jax.lax.clamp(0.5, self.decay_constant.data, 1.0)
         
         mem_pot = alpha*mem_pot + (1.-alpha)*synaptic_input # TODO with (1-alpha) or without ?
         spike_output = self.spike_fn(mem_pot-self.threshold)
@@ -81,7 +98,7 @@ class LIF(StatefulLayer):
     synaptic currents. Requires two decay constants to describe
     decay of membrane potential and synaptic current.
     """
-    decay_constants: Union[Sequence[float], Array] = static_field()
+    decay_constants: TrainableArray
     threshold: float = static_field()
     spike_fn: Callable = static_field()
     reset_val: float = static_field()
@@ -93,7 +110,9 @@ class LIF(StatefulLayer):
                 threshold: float = 1.,
                 stop_reset_grad: bool = True,
                 reset_val: Optional[float] = None,
-                init_fn: Optional[Callable] = None) -> None:
+                init_fn: Optional[Callable] = None,
+                shape: Union[Sequence[int], int, None] = None,
+                key: PRNGKey = jax.random.PRNGKey(0)) -> None:
         """
         Arguments:
             - `shape`: Shape of the neuron layer.
@@ -109,6 +128,8 @@ class LIF(StatefulLayer):
             - `init_fn`: Function to initialize the state of the spiking neurons.
                         Defaults to initialization with zeros if 
                         nothing else is provided.
+            - 'shape' if given, the parameters will be expanded into vectors and initialized accordingly
+            - 'key' used to initialize the parameters when shape is not None
         """
 
         super().__init__(init_fn)
@@ -118,6 +139,14 @@ class LIF(StatefulLayer):
         self.spike_fn = spike_fn
         self.reset_val = reset_val
         self.stop_reset_grad = stop_reset_grad
+
+        if shape is None:
+            self.decay_constants = TrainableArray(decay_constants)
+        else:
+            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=[len(decay_constants)]+list(shape), key=key)
+            self.decay_constants = TrainableArray(_arr)
+
+
 
     def init_state(self, 
                    shape: Union[int, Sequence[int]], 
@@ -145,8 +174,8 @@ class LIF(StatefulLayer):
         refectory_potential = lax.stop_gradient(reset_pot) if self.stop_reset_grad else reset_pot
         mem_pot = mem_pot - refectory_potential
 
-        alpha = self.decay_constants[0]
-        beta = self.decay_constants[1]
+        alpha = jax.lax.clamp(0.5,self.decay_constants.data[0], 1.0)
+        beta  = jax.lax.clamp(0.5,self.decay_constants.data[1], 1.0)
         
         mem_pot = alpha*mem_pot + (1.-alpha)*syn_curr
         syn_curr = beta*syn_curr + (1-beta)*synaptic_input
@@ -178,9 +207,9 @@ class LIFSoftReset(LIF):
         refr_pot = lax.stop_gradient(reset_pot) if self.stop_reset_grad else reset_pot
         mem_pot = mem_pot - refr_pot
 
-        alpha = self.decay_constants[0]
-        beta = self.decay_constants[1]
-        
+        alpha = jax.lax.clamp(0.5,self.decay_constants.data[0], 1.0)
+        beta  = jax.lax.clamp(0.5,self.decay_constants.data[1], 1.0)
+ 
         mem_pot = alpha*mem_pot + (1.-alpha)*syn_curr
         syn_curr = beta*syn_curr + (1-beta)*synaptic_input
 
@@ -189,30 +218,32 @@ class LIFSoftReset(LIF):
         state = [mem_pot, syn_curr, spike_output]
         return [state, spike_output]
 
-class AdaptiveExponentialLIF(StatefulLayer):
+class AdaptiveLIF(StatefulLayer):
     """
     Implementation of a adaptive exponential leaky integrate-and-fire neuron
     as presented in https://neuronaldynamics.epfl.ch/online/Ch6.S1.html.
     """
-    decay_constants: float = static_field()
+    decay_constants: TrainableArray
     threshold: float = static_field()
     spike_fn: Callable = static_field()
-    ada_step_val: float = static_field()
-    ada_decay_constant: float = static_field()
-    ada_coupling_var: float = static_field()
+    ada_step_val: TrainableArray 
+    ada_decay_constant: TrainableArray 
+    ada_coupling_var: TrainableArray 
     stop_reset_grad: bool = static_field()
     reset_val: Optional[float] = static_field()
 
     def __init__(self,
-                decay_constant: float,
-                ada_decay_constant: float,
-                ada_step_val: float,
-                ada_coupling_var: float,
+                decay_constants: float,
+                ada_decay_constant: float = .8 ,
+                ada_step_val: float = 1.0,
+                ada_coupling_var: float = .5,
                 spike_fn: Callable = superspike_surrogate(10.),
                 threshold: float = 1.,
                 stop_reset_grad: bool = True,
                 reset_val: Optional[float] = None,
-                init_fn: Optional[Callable] = None) -> None:
+                init_fn: Optional[Callable] = None,
+                shape: Union[Sequence[int],int, None] = None,
+                key: PRNGKey = jax.random.PRNGKey(0)) -> None:
         """**Arguments**:
 
         - `decay_constants`: Decay constants for the adaptive LIF neuron.
@@ -225,20 +256,32 @@ class AdaptiveExponentialLIF(StatefulLayer):
             through the refectory potential.
         - `init_fn`: Function to initialize the initial state of the spiking neurons.
             Defaults to initialization with zeros if nothing else is provided.
+        - 'shape' if given, the parameters will be expanded into vectors and initialized accordingly
+        - 'key' used to initialize the parameters when shape is not None
         """
 
         super().__init__(init_fn)
 
         # TODO assert for numerical stability 0.999 leads to errors...
         self.threshold = threshold
-        self.decay_constant = decay_constant
         self.spike_fn = spike_fn
         self.reset_val = reset_val if reset_val is not None else None
         self.stop_reset_grad = stop_reset_grad
-        
-        self.ada_decay_constant = ada_decay_constant
-        self.ada_step_val = ada_step_val
-        self.ada_coupling_var = ada_coupling_var
+       
+        if shape is None:
+            self.decay_constants = TrainableArray(decay_constants[0])
+            self.ada_decay_constant = TrainableArray(ada_decay_constant)
+            self.ada_step_val = TrainableArray(ada_step_val)
+            self.ada_coupling_var = TrainableArray(ada_coupling_var)
+        else:
+            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=shape, key=key)
+            self.decay_constants = TrainableArray(_arr)
+            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=shape, key=key)
+            self.ada_decay_constant = TrainableArray(_arr)
+            _arr = jax.random.uniform(minval=.0,maxval=2.0, shape=shape, key=key)
+            self.ada_step_val = TrainableArray(_arr)
+            _arr = jax.random.uniform(minval=-1.,maxval=1., shape=shape, key=key)
+            self.ada_coupling_var = TrainableArray(_arr)
 
     def init_state(self, 
                     shape: Union[Sequence[int], int], 
@@ -246,10 +289,9 @@ class AdaptiveExponentialLIF(StatefulLayer):
                     *args, 
                     **kwargs) -> Sequence[Array]:
         init_state_mem_pot = self.init_fn(shape, key, *args, **kwargs)
-        init_state_ada = jnp.zeros(shape, key)
-        init_state_spikes = jnpzeros(shape, key)
-        init_state = jnp.concatenate([init_state_mem_pot, init_state_ada, init_state_spikes])
-        return init_state
+        init_state_ada = jnp.zeros(shape)
+        init_state_spikes = jnp.zeros(shape)
+        return [init_state_mem_pot, init_state_ada, init_state_spikes]
 
     def __call__(self, 
                 state: Sequence[Array], 
@@ -257,18 +299,18 @@ class AdaptiveExponentialLIF(StatefulLayer):
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
         mem_pot, ada_var = state[0], state[1]
 
-        alpha = self.decay_constant
+        alpha = jax.lax.clamp(0.5,self.decay_constants.data,1.)
+        beta = jax.lax.clamp(0.5, self.ada_decay_constant.data, 1.) 
+        a = jax.lax.clamp(-1.,self.ada_coupling_var.data,1.)
+        b = jax.lax.clamp(0.,self.ada_step_val.data,2.)
 
         # Calculation of the membrane potential
-        mem_pot = alpha*mem_pot + (synaptic_input+ada_var)
+        mem_pot = alpha*mem_pot + (1 - alpha)*(synaptic_input+ada_var)
         # membrane_potential_new = alpha*membrane_potential + (1-alpha)*(synaptic_input + ada_var) # TODO with (1-alpha) or without ?
         spike_output = self.spike_fn(mem_pot - self.threshold)
         
         # Calculation of the adaptive part of the dynamics
-        ada_var = (1.-self.ada_decay_constant)*self.ada_coupling_var \
-                * (mem_pot-self.threshold) \
-                + self.ada_decay_constant*ada_var \
-                - self.ada_step_val*lax.stop_gradient(spike_output)
+        ada_var_new = (1.-beta)*a * mem_pot + beta*ada_var - b*lax.stop_gradient(spike_output)
 
         if self.reset_val is None:
             reset_pot = mem_pot*spike_output
@@ -280,6 +322,6 @@ class AdaptiveExponentialLIF(StatefulLayer):
         mem_pot = mem_pot - refectory_pot
 
         # state = (membrane_potential_new, ada_var_new)
-        state = jnp.concatenate([mem_pot, ada_var_new, spike_output])
+        state = [mem_pot, ada_var_new, spike_output]
         return [state, spike_output]
 
