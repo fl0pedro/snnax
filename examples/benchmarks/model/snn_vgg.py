@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Tue 28 Mar 2023 03:15:53 PM CEST
-# Last Modified : Fri 19 Apr 2024 11:11:52 AM CEST
+# Last Modified : Tue 23 Apr 2024 10:00:52 PM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
@@ -24,7 +24,7 @@ class spVGG(eqx.Module):
     def __init__(self, 
                  cfg: List[Union[str, int]], 
                  input_size : List[int] = [2,32,32],
-                 num_classes:int = 11, 
+                 out_channels:int = 11, 
                  dt: float = 0.001, 
                  alpha = None,
                  beta = None,
@@ -35,6 +35,7 @@ class spVGG(eqx.Module):
                  burnin: int = 20,
                  norm: bool = True,
                  key: jrandom.PRNGKey = None,                 
+                 neuron_model: str = 'snnax.snn.LIFSoftReset',
                  **kwargs):
 
         if tau_m is None:
@@ -57,28 +58,43 @@ class spVGG(eqx.Module):
         
         key1, key2, key3, key4, key = jrandom.split(key, 5)
         surr = sr(beta = 10.0)
-        layers, channels, output_size = make_layers(input_size, alpha, beta, surr, cfg, norm = norm, dropout_rate = dropout_rate, key=key)
+        layers, channels, output_size = make_layers(input_size,
+                                                    alpha,
+                                                    beta,
+                                                    surr,
+                                                    cfg,
+                                                    norm = norm,
+                                                    dropout_rate = dropout_rate,
+                                                    neuron_model = get_method(neuron_model),
+                                                    key=key)
         self.cell = snn.Sequential(*layers)
 
         init_key1, init_key2 = jax.random.split(key,2)
 
         self.classifier = eqx.nn.Sequential([
-            eqx.nn.Linear(int(np.prod(output_size)),num_classes, key = init_key1),
+            eqx.nn.Linear(int(np.prod(output_size)),out_channels, key = init_key1),
             ])
 
     def __call__(self, x, key=None):
         feat = self.embed(x, key = key)
-        _key = jax.random.split(key, feat.shape[0])
-        return jax.vmap(self.classifier)(feat.reshape(feat.shape[0],-1), key = _key)
+        if self.ro_int is None:
+            return self.classifier(feat.reshape(-1), key = key)
+        else:
+            _key = jax.random.split(key, feat.shape[0])
+            return jax.vmap(self.classifier)(feat.reshape(feat.shape[0],-1), key = _key)
 
     def embed(self, x, key=None):
         state = self.cell.init_state(x[0,:].shape, key)
         state, out = self.cell(state, x, key, burnin=self.burnin)
-        if self.ro_int == -1:
+
+        if self.ro_int is None:
+            return out[-1][-1]
+        elif self.ro_int == -1:
             ro = out[-1].shape[0]
+            return out[-1][::-ro]
         else:
             ro = np.minimum(self.ro_int, out[-1].shape[0])
-        return out[-1][::-ro]
+            return out[-1][::-ro]
     
     def get_final_states(self, x, key):
         #For the moment only return the output of cell, bypassing the avg adaptive pooling
@@ -93,12 +109,13 @@ def make_layers(input_size,
 str, int]],
                 norm: bool = False,
                 dropout_rate: float = 0.0,
+                neuron_model = eqx.Module,
                 key: jax.random.PRNGKey = jax.random.PRNGKey(0)):
     layers = []
     input_size = np.array(input_size)
+    input_size = input_size.transpose()
     in_channels = input_size[0]
     for v in cfg:
-
         shape = np.concatenate([[v], input_size[1:]])
         if v == "M":
             layers += [snn.MaxPool2d(kernel_size=2,stride=2,padding=0, spike_fn = surr, threshold = 1)]
@@ -118,15 +135,13 @@ str, int]],
                                padding=2,
                                key = init_key)
             if norm:
-                init_key, key = jax.random.split(key,2)
                 layers += [dropout,
                         conv2d,
-                        eqx.nn.LayerNorm(shape=shape,elementwise_affine=False, eps=1e-4),
-                        snn.LIFSoftReset([alpha,beta], spike_fn=surr, reset_val=1)]
+                        eqx.nn.LayerNorm(shape=shape,elementwise_affine=False, eps=1e-4)]
             else:
                 layers += [dropout,
-                           conv2d,
-                           snn.LIFSoftReset([alpha,beta], spike_fn=surr, reset_val=1)]
+                           conv2d]
+            layers += [neuron_model([alpha,beta], shape=shape, spike_fn=surr, reset_val=1, key=init_key)]
             in_channels = v
         elif v[0] == "A":
             if len(v) == 1: #backward compatibility

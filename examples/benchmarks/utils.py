@@ -4,14 +4,11 @@
 # Author: Emre Neftci
 #
 # Creation Date : Tue 14 Mar 2023 02:02:35 PM CET
-# Last Modified : Sun 21 Apr 2024 10:58:16 AM CEST
+# Last Modified : Tue 23 Apr 2024 09:27:00 PM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
 #----------------------------------------------------------------------------- 
-"""
-This file contains all sorts of utility functions, including training functions, data preparation, etc.
-"""
 
 import equinox as eqx
 import numpy as np
@@ -25,9 +22,44 @@ from chex import Array, PRNGKey
 
 class TrainableArray(eqx.Module):
     data: Array
+    requires_grad : bool
 
     def __init__(self, array):
         self.data = array
+        self.requires_grad = True
+
+def sum_pytrees(models):
+    return jax.tree_map(lambda *models: sum(models), *models)
+
+
+
+def prepare_data(data, key, shard=None):
+    '''
+    Assigns data to devices along the first dimension (batch dimension)
+    If shard is not None, data parellel training will be enabled and the batch dimension will be divided among the shards
+    '''
+    datap = []
+    for d in data:
+        if hasattr(d, 'shape'):
+            ds_ =  jnp.array(d)
+            if shard is not None:
+                datap.append(jax.device_put(ds_, shard.reshape(shard.shape[0],*np.ones_like(ds_.shape[1:]))))
+            else:
+                datap.append(ds_)
+    jrandom = jax.random
+    bk = jrandom.split(key, data[0].shape[0])
+    _, key = jrandom.split(bk[-1], 2)
+    if shard is not None:
+        bkp = jax.device_put(bk, shard.reshape(shard.shape[0],*np.ones_like(bk.shape[1:])))
+    else:
+        bkp = bk
+    return datap, bkp, key
+
+
+def init_LSUV_actrate(act_rate, threshold=0., var=1.0):
+    from scipy.stats import norm
+    import scipy.optimize
+    return scipy.optimize.fmin(lambda loc: (act_rate-(1-norm.cdf(threshold,loc,var)))**2, x0=0.)[0]
 
 def apply_to_tree_leaf(pytree: PyTree, identifier: str, replace_fn: Callable) -> PyTree:
     """
@@ -50,7 +82,7 @@ def apply_to_tree_leaf(pytree: PyTree, identifier: str, replace_fn: Callable) ->
             if _has_identifier(leaf)
         )
 
-    return eqx.tree.tree_at(_identifier, pytree, replace_fn=replace_fn)
+    return eqx.tree_at(_identifier, pytree, replace_fn=replace_fn)
 
 
 def apply_to_tree_leaf_bytype(pytree: PyTree, 
@@ -69,52 +101,22 @@ def apply_to_tree_leaf_bytype(pytree: PyTree,
     """
     if typ is None:
         _has_identifier = lambda leaf: hasattr(leaf, identifier)
+    elif type(typ) is str:
+        _has_identifier = lambda leaf: hasattr(leaf, typ) and hasattr(leaf, identifier)
     else:
         _has_identifier = lambda leaf: (type(leaf) == typ) and hasattr(leaf, identifier)
     def _identifier(pytree):
-        return tuple( getattr(leaf,identifier) for leaf in jax.tree_util.tree_leaves(pytree, is_leaf=_has_identifier) if _has_identifier(leaf) and getattr(leaf, identifier) is not None )
+        a = tuple( 
+                  getattr(leaf,identifier) 
+                  for leaf in jax.tree_util.tree_leaves(pytree, is_leaf=_has_identifier) 
+                  if _has_identifier(leaf) and getattr(leaf, identifier) is not None )
+        return a
 
     return eqx.tree_at(_identifier, pytree, replace_fn=replace_fn)
 
-def sum_pytrees(models):
-    '''
-    Sums all the leaves of the pytrees in the list of pytrees
-    '''
-    return jax.tree_map(lambda *models: sum(models), *models)
-
-
-
-def prepare_data(data: List, key: PRNGKey, shard=None):
-    '''
-    Assigns data to devices along the first dimension (batch dimension)
-    If shard is not None, data parellel training will be enabled and the batch dimension will be divided among the shards
-
-    **Arguments**
-    - `data`: A list of arrays
-    - `key`: A jax PRNGkey
-
-    '''
-    datap = []
-    for d in data:
-        if hasattr(d, 'shape'):
-            ds_ =  jnp.array(d)
-            if shard is not None:
-                datap.append(jax.device_put(ds_, shard.reshape(shard.shape[0],*np.ones_like(ds_.shape[1:]))))
-            else:
-                datap.append(ds_)
-    jrandom = jax.random
-    bk = jrandom.split(key, data[0].shape[0])
-    _, key = jrandom.split(bk[-1], 2)
-    if shard is not None:
-        bkp = jax.device_put(bk, shard.reshape(shard.shape[0],*np.ones_like(bk.shape[1:])))
-    else:
-        bkp = bk
-    return datap, bkp, key
-
 def vid_to_patch(x, patch_size=4, flatten_channels=True, sort=False):
     """
-    Transforms an array of type [T, H, W, C] to an array of patches of size [T, H', W', p_H, p_W, C]. Used for visual transformers on video (event-based) type data, as a patchify stem.
-    **Arguments:**
+    Inputs:
         x - torch.Tensor representing the video of shape [T, H, W, C]
         patch_size - Number of pixels per dimension of the patches (integer)
         flatten_channels - If True, the patches will be returned in a flattened format
@@ -138,8 +140,7 @@ def vid_to_patch(x, patch_size=4, flatten_channels=True, sort=False):
 
 def img_to_patch(x, patch_size, flatten_channels=True):
     """
-    Transforms an array of type [T, H, W, C] to an array of patches of size [T, H', W', p_H, p_W, C]. Used for visual transformers, as a patchify stem.
-    **Arguments:**
+    Inputs:
         x - torch.Tensor representing the image of shape [C, H, W]
         patch_size - Number of pixels per dimension of the patches (integer)
         flatten_channels - If True, the patches will be returned in a flattened format
@@ -157,43 +158,41 @@ def img_to_patch(x, patch_size, flatten_channels=True):
 
 def img_batch_to_patch(x, patch_size, flatten_channels=True):
     """
-    Same as img_to_patch but for a batch of images (using vmap).
-    **Arguments:**
+    Inputs:
         x - torch.Tensor representing the image of shape [B, H, W, C]
         patch_size - Number of pixels per dimension of the patches (integer)
         flatten_channels - If True, the patches will be returned in a flattened format
                            as a feature vector instead of a image grid.
     """
+#    B, H, W, C = x.shape
+#    x = x.reshape(B, H//patch_size, patch_size, W//patch_size, patch_size, C)
+#    x = x.transpose(0, 1, 3, 2, 4, 5)    # [B, H', W', p_H, p_W, C]
+#    x = x.reshape(B, -1, *x.shape[3:])   # [B, H'*W', p_H, p_W, C]
+#    if flatten_channels:
+#        x = x.reshape(B, x.shape[1], -1) # [B, H'*W', p_H*p_W*C]
+#    return x
     f = lambda x: img_to_patch(x, patch_size=patch_size, flatten_channels=flatten_channels)
     return jax.vmap(f, x)
 
+
 def standardize(x: np.ndarray, eps=1e-7):
-    """
-    Standardizes the input numpy array along the first axis (batch dimension).
-    **Arguments:**
-    x - np.ndarray of shape [B, ...]
-    eps - small value to avoid division by zero
-    """
     mi = x.min(axis=0)
     ma = x.max(axis=0)
     return (x-mi)/(ma-mi+eps)
 
 def show_filter_spec(model, filter_spec):
-    """
-    Shows the filter spec of the model
-    **Arguments:**
-    model - pytree representing the model (e.g. as used in equinox)
-    filter_spec - pytree of the same structure as the model with boolean values, where True indicates that the leaf should be filtered
-    """
     from jax.tree_util import tree_map
     jtu.tree_map(lambda x, y: print(type(x),jnp.shape(y),x), filter_spec, vit);  
 
-def xent(y_pred, y_hat):
+def sum_models(models):
+    return jax.tree_map(lambda *models: sum(models), *models)
+
+def xent(y_pred, y_hat, num_classes=10):
     """
     y_pred: jnp array of predictions
     y_hat: jnp array of targets (categorical)
     """
-    y1h = jax.nn.one_hot(y_hat, num_classes=10)
+    y1h = jax.nn.one_hot(y_hat, num_classes=num_classes)
     return  -jnp.sum(y1h*jax.nn.log_softmax(y_pred)) / len(y_pred)
 
 def mse(y_pred, y_hat):
@@ -203,12 +202,12 @@ def mse(y_pred, y_hat):
     """
     return jnp.mean((y_hat-y_pred)**2)
 
-def mse_cat(y_pred, y_hat):
+def mse_cat(y_pred, y_hat, num_classes=10):
     """
     y_pred: jnp array of predictions
     y_hat: jnp array of targets (categorical)
     """
-    y1h = jax.nn.one_hot(y_hat, num_classes=10)
+    y1h = jax.nn.one_hot(y_hat, num_classes=num_classes)
     return jnp.mean((y1h-y_pred)**2)
 
 def prng_batch(key, batch_size):
@@ -216,14 +215,7 @@ def prng_batch(key, batch_size):
     _, key = jax.random.split(batch_key[-1], 2)
     return key, batch_key
 
-def default_init(model, init_key: PRNGKey = None, custom_init: bool=True):
-    """
-    Initializes the model with a default initialization scheme for the commonly used equinox layers.
-    **Arguments:**
-    - `model`: The model to be initialized, pytree as returned by equinox modules
-    - `init_key`: A jax PRNGKey for initialization
-    - `custom_init`: If True, uses custom initialization for the layers, otherwise does not initialize
-    """
+def default_init(model, init_key = None, custom_init=True):
     if init_key is None:
         init_key = jax.random.PRNGKey(0)
 
@@ -251,16 +243,38 @@ def default_init(model, init_key: PRNGKey = None, custom_init: bool=True):
     filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.LayerNorm, 'bias', lambda _: True)
     filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.GroupNorm, 'weight', lambda _: True)
     filter_spec = apply_to_tree_leaf_bytype(filter_spec, eqx.nn.GroupNorm, 'bias', lambda _: True)
-    filter_spec = apply_to_tree_leaf_bytype(filter_spec, TrainableArray, 'data', lambda _: True)
+    filter_spec = apply_to_tree_leaf_bytype(filter_spec, 'requires_grad', 'data', lambda _: True)
     
     return model, filter_spec
 
-def init_LSUV_actrate(act_rate, threshold=0., var=1.0):
-    from scipy.stats import norm
-    import scipy.optimize
-    return scipy.optimize.fmin(lambda loc: (act_rate-(1-norm.cdf(threshold,loc,var)))**2, x0=0.)[0]
 
-def LSUV_withnorm(model, 
+## Following for inspecting the gradients
+#             for n,g in enumerate(grads.cell.layers):
+#                 name = str(n)+'.'+str(g).split('(')[0]
+#                 if hasattr(g,'weight'):
+#                     if g.weight is not None:
+#                         wandb.log({'hist/grad_weight/'+name: wandb.Histogram(g.weight.flatten()),'epoch':e})
+#                 if hasattr(g,'bias'):
+#                     if g.bias is not None:
+#                         wandb.log({'hist/grad_bias/'+name: wandb.Histogram(g.bias.flatten()),'epoch':e})
+
+#             for n,g in enumerate(updates.cell.layers):
+#                 name = str(n)+'.'+str(g).split('(')[0]
+#                 if hasattr(g,'weight'):
+#                     if g.weight is not None:
+#                         wandb.log({'hist/upd_weight/'+name: wandb.Histogram(g.weight.flatten()),'epoch':e})
+#                 if hasattr(g,'bias'):
+#                     if g.bias is not None:
+#                         wandb.log({'hist/upd_bias/'+name: wandb.Histogram(g.bias.flatten()),'epoch':e})
+
+#             batch_key = jax.random.split(key, len(x))
+#             s,o= jax.vmap(model.get_final_states)(jnp.array(x), batch_key)
+
+#             for n,g in enumerate(updates.cell.layers):
+#                 name = str(n)+'.'+str(g).split('(')[0]
+#                 wandb.log({'hist/state0/'+name: wandb.Histogram(s[n][0].flatten()),'epoch':e})
+
+def lsuv_withnorm(model, 
         data: Sequence[Array], 
         key: PRNGKey, 
         tgt_mean: float=-.85, 
@@ -323,6 +337,7 @@ def LSUV_withnorm(model,
             if not(isinstance(layer, eqx.nn.LayerNorm) or isinstance(layer, eqx.nn.GroupNorm)):
                 continue
 
+
             #handles corner case where lif is not the final layer
             if spike_layer_idx >= len(spike_layers): 
                 continue
@@ -380,9 +395,6 @@ def LSUV_withnorm(model,
     return model
 
 def get_method(name):
-    """
-    Used in train_dataset_model to import the given paths (models, datasets and training functions
-    """
     from importlib import import_module
 
     try:
@@ -397,8 +409,7 @@ def get_method(name):
         met = getattr(mod, m)
     return met
 
-#####
-# Functions for creating training functions
+
 def create_cls_func_xent(model, optim, filter_spec, num_classes):
     '''
     Default classification functions using the cross entropy loss for classical neural networks (no time component)
@@ -500,7 +511,7 @@ def create_cls_func_multixent(model, optim, filter_spec, num_classes, sparsity_l
         return np.mean(np.array(pred) == y)
     return compute_loss, make_step, accuracy
 
-def create_func_seq2seq_xent(model, optim, filter_spec, output_size):
+def create_func_seq2seq_xent(model, optim, filter_spec, num_classes):
     import equinox as eqx
     import jax
     from collections import Counter, defaultdict 
@@ -608,7 +619,7 @@ def create_func_seq2seq_mse_lastpointacc(model, optim, filter_spec, output_size)
         return np.mean(errors)
     return compute_loss, make_step, accuracy
 
-def create_func_seq2seq_xent(model, optim, filter_spec, output_size):
+def create_func_seq2seq_xent(model, optim, filter_spec, num_classes):
     import equinox as eqx
     import jax
     from collections import Counter, defaultdict 
@@ -616,7 +627,7 @@ def create_func_seq2seq_xent(model, optim, filter_spec, output_size):
 
     def _loss_fn(model, x, labels, rng_key):
         logits = model(x, key=rng_key)
-        return xent(logits, labels).sum(), logits
+        return xent(logits, labels, num_classes=num_classes).sum(), logits
     
     
     @eqx.filter_value_and_grad
@@ -685,6 +696,48 @@ def create_cls_func_xent_lastpoint(model, optim, filter_spec, num_classes):
     def accuracy(model, batch, rng_key):
         x, y, *z = batch
         pred_y = _run_accuracy(model, batch, rng_key).argmax(axis=-1)
+        return np.mean(np.array(pred_y) == y)
+    return compute_loss, make_step, accuracy
+
+def create_cls_func_xent_variable_seqlen(model, optim, filter_spec, num_classes):
+    '''
+    Sequence classification functions using the cross entropy loss for neural networks, where the sequence length is variable and the datset returns the sequence length in Z
+               Y
+     ^  ^      ^
+    X1 X2 ... XZ
+
+    assumes first element of z is the sequence length
+    assumes model will return element at seqlen, by passing seqlen
+    '''
+    import equinox as eqxac
+    import jax
+
+    
+    @eqx.filter_value_and_grad
+    def compute_loss(diff_model, static_model, batch, rng_key):
+        x, y, *z = batch
+        model = eqx.combine(diff_model, static_model)
+        pred_y = jax.vmap(model)(x, key = rng_key, seqlen=z[0])
+        y1h = jax.nn.one_hot(y, num_classes=num_classes)
+        return -jnp.mean(y1h*jax.nn.log_softmax(pred_y))
+
+    @eqx.filter_jit
+    def make_step(model, batch, opt_state, rng_key):    
+        diff_model, static_model = eqx.partition(model, filter_spec)
+        loss, grads = compute_loss(diff_model, static_model, batch, rng_key)
+        updates, opt_state = optim.update(grads, opt_state, model)
+        model = eqx.apply_updates(model, updates)
+        return loss, model, opt_state, grads, updates
+
+    @eqx.filter_jit
+    def _run_accuracy(model, batch, rng_key):
+        #Needed because counter is not jittable
+        x, y, *z = batch
+        return jax.vmap(model)(x, key = rng_key, seqlen=z[0]) 
+
+    def accuracy(model, batch, rng_key):
+        pred_y = _run_accuracy(model, batch, rng_key).argmax(axis=-1)
+        x, y, *z = batch
         return np.mean(np.array(pred_y) == y)
     return compute_loss, make_step, accuracy
 
