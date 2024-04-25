@@ -127,9 +127,10 @@ def shd(batch_size=72, dt=1e-3, steps_per_dt=None, ds=4, n_events_attention=None
                                                                 drop_last = True,
                                                                 root=root,
                                                                 **dl_kwargs)
-    #input_size = (70, 1, 1)
-    input_size = [700, 1]
+
+    input_size = [700]
     output_size = 20
+
     return dataloader_train, dataloader_test, None, input_size, output_size
 
 def shd_tonic(batch_size=72, delta_t=10000, dt=1e-3, steps_per_dt=None, ds=4, n_events_attention=None, seqlen_train=500, seqlen_test=1800, num_workers=8, root="./data", **dl_kwargs):
