@@ -150,7 +150,7 @@ def shd_tonic(batch_size=72, delta_t=10000, dt=1e-3, steps_per_dt=None, ds=4, n_
     transform_train = transforms.Compose(transforms_list)
 
     # create datasets
-    datasets_folder = "./fdata/"
+    datasets_folder = "./data/"
     train_ds = tonic.datasets.SHD(
         datasets_folder, train=True, transform=transform_train)
     test_ds = tonic.datasets.SHD(
