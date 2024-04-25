@@ -25,7 +25,7 @@ class SimpleLIF(StatefulLayer):
     Requires one decay constant to simulate membrane potential leak.
     
     Arguments:
-        - `decay_constant`: Decay constant of the simple LIF neuron.
+        - `decay_constants`: Decay constant of the simple LIF neuron.
         - `spike_fn`: Spike treshold function with custom surrogate gradient.
         - `threshold`: Spike threshold for membrane potential. Defaults to 1.
         - `reset_val`: Reset value after a spike has been emitted.
@@ -34,6 +34,8 @@ class SimpleLIF(StatefulLayer):
         - `init_fn`: Function to initialize the initial state of the 
                     spiking neurons. Defaults to initialization with zeros 
                     if nothing else is provided.
+        - 'shape' if given, the parameters will be expanded into vectors and initialized accordingly
+        - 'key' used to initialize the parameters when shape is not None
     """
     decay_constants: Union[Sequence[float], Array, TrainableArray] 
     threshold: float = static_field()
@@ -42,7 +44,7 @@ class SimpleLIF(StatefulLayer):
     reset_val: Optional[float] = static_field()
 
     def __init__(self,
-                decay_constant: TrainableArray,
+                decay_constants: TrainableArray,
                 spike_fn: Callable = superspike_surrogate(10.),
                 threshold: float = 1.,
                 stop_reset_grad: bool = True,
@@ -55,13 +57,13 @@ class SimpleLIF(StatefulLayer):
         super().__init__(init_fn)
         # TODO assert for numerical stability 0.999 leads to errors...
         self.threshold = threshold
-        self.decay_constant = decay_constant
+        self.decay_constants = decay_constants
         self.spike_fn = spike_fn
         self.reset_val = reset_val if reset_val is not None else None
         self.stop_reset_grad = stop_reset_grad
 
         if shape is None:
-            self.decay_constant = TrainableArray(decay_constants)
+            self.decay_constants = TrainableArray(decay_constants)
         else:
             _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=shape, key=key)
             self.decay_constants = TrainableArray(_arr)
@@ -70,26 +72,25 @@ class SimpleLIF(StatefulLayer):
                 state: Array, 
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
-        alpha = jax.lax.clamp(0.5, self.decay_constant.data, 1.0)
-        
+        alpha = jax.lax.clamp(0.5, self.decay_constants.data, 1.0)
+        mem_pot = state[0]
         mem_pot = alpha*mem_pot + (1.-alpha)*synaptic_input # TODO with (1-alpha) or without ?
         spike_output = self.spike_fn(mem_pot-self.threshold)
+
         
         if self.reset_val is None:
             reset_pot = mem_pot*spike_output
         else:
             reset_val = jax.nn.softplus(self.reset_val)
-            reset_pot = reset_val * spikes_out
+            reset_pot = reset_val * spike_output
         # optionally stop gradient propagation through refectory potential       
         refectory_potential = lax.stop_gradient(reset_pot) if self.stop_reset_grad else reset_pot
         mem_pot = mem_pot - refectory_potential
         
-        mem_pot = alpha*mem_pot + (1.-alpha)*synaptic_input # TODO with (1-alpha) or without ?
-        spikes_out = self.spike_fn(mem_pot-threshold)
 
-        output = spikes_out
-        state = [mem_pot,  spikes_out]
-        return [state, output]
+
+        state = [mem_pot,  spike_output]
+        return [state, spike_output]
 
 class LIF(StatefulLayer):
     """

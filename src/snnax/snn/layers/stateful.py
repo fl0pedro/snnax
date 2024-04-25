@@ -23,7 +23,7 @@ class StatefulLayer(eqx.Module):
                     key: PRNGKey, 
                     *args, 
                     **kwargs):
-        return jnp.stack([self.init_fn(shape, key, *args, **kwargs), zeros(shape, key)])
+        return [self.init_fn(shape, key, *args, **kwargs), jnp.zeros(shape)]
 
     def init_out(self, 
                 shape: Union[int, Sequence[int]], *, 
