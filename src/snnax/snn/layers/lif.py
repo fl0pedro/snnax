@@ -1,4 +1,4 @@
-from typing import Sequence, Union, Callable, Optional, Tuple
+from typing import Sequence, Union, Callable, Optional, Tuple, List
 
 import jax
 import jax.lax as lax
@@ -6,17 +6,11 @@ import jax.numpy as jnp
 
 from equinox import static_field, Module
 
-from .stateful import StatefulLayer
+from .stateful import StatefulLayer, TrainableArray
 from ...functional.surrogate import superspike_surrogate
 from chex import Array, PRNGKey
 
-class TrainableArray(Module):
-    data: Array
-    requires_grad: bool
 
-    def __init__(self, array):
-        self.data = array
-        self.requires_grad = True
 
 class SimpleLIF(StatefulLayer):
     """
@@ -52,7 +46,7 @@ class SimpleLIF(StatefulLayer):
                 init_fn: Optional[Callable] = None,
                 shape: Union[Sequence[int],int,None] = None,
                 key: PRNGKey = jax.random.PRNGKey(0),
-                ) -> None:
+                **kwargs) -> None:
 
         super().__init__(init_fn)
         # TODO assert for numerical stability 0.999 leads to errors...
@@ -62,17 +56,14 @@ class SimpleLIF(StatefulLayer):
         self.reset_val = reset_val if reset_val is not None else None
         self.stop_reset_grad = stop_reset_grad
 
-        if shape is None:
-            self.decay_constants = TrainableArray(decay_constants)
-        else:
-            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=shape, key=key)
-            self.decay_constants = TrainableArray(_arr)
+        self.decay_constants = self.init_parameters(decay_constants, shape)
+
 
     def __call__(self, 
                 state: Array, 
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
-        alpha = jax.lax.clamp(0.5, self.decay_constants.data, 1.0)
+        alpha = jax.lax.clamp(0.5, self.decay_constants.data[0], 1.0)
         mem_pot = state[0]
         mem_pot = alpha*mem_pot + (1.-alpha)*synaptic_input # TODO with (1-alpha) or without ?
         spike_output = self.spike_fn(mem_pot-self.threshold)
@@ -140,14 +131,7 @@ class LIF(StatefulLayer):
         self.spike_fn = spike_fn
         self.reset_val = reset_val
         self.stop_reset_grad = stop_reset_grad
-
-        if shape is None:
-            self.decay_constants = TrainableArray(decay_constants)
-        else:
-            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=[len(decay_constants)]+list(shape), key=key)
-            self.decay_constants = TrainableArray(_arr)
-
-
+        self.decay_constants = self.init_parameters(decay_constants, shape)
 
     def init_state(self, 
                    shape: Union[int, Sequence[int]], 
@@ -268,22 +252,13 @@ class AdaptiveLIF(StatefulLayer):
         self.spike_fn = spike_fn
         self.reset_val = reset_val if reset_val is not None else None
         self.stop_reset_grad = stop_reset_grad
-       
-        if shape is None:
-            self.decay_constants = TrainableArray(decay_constants[0])
-            self.ada_decay_constant = TrainableArray(ada_decay_constant)
-            self.ada_step_val = TrainableArray(ada_step_val)
-            self.ada_coupling_var = TrainableArray(ada_coupling_var)
-        else:
-            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=shape, key=key)
-            self.decay_constants = TrainableArray(_arr)
-            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=shape, key=key)
-            self.ada_decay_constant = TrainableArray(_arr)
-            _arr = jax.random.uniform(minval=.0,maxval=2.0, shape=shape, key=key)
-            self.ada_step_val = TrainableArray(_arr)
-            _arr = jax.random.uniform(minval=-1.,maxval=1., shape=shape, key=key)
-            self.ada_coupling_var = TrainableArray(_arr)
 
+
+        self.decay_constants = self.init_parameters(decay_constants, shape)
+        self.ada_decay_constant = self.init_parameters(ada_decay_constant, shape)
+        self.ada_step_val = self.init_parameters(ada_step_val, shape)
+        self.ada_coupling_var = self.init_parameters(ada_coupling_var, shape)
+       
     def init_state(self, 
                     shape: Union[Sequence[int], int], 
                     key: PRNGKey, 

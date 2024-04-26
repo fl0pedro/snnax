@@ -1,5 +1,4 @@
 from typing import Sequence, Union, Callable, Optional, Tuple
-
 import jax
 import jax.lax as lax
 import jax.numpy as jnp
@@ -9,9 +8,6 @@ from equinox import static_field
 import equinox as eqx
 from .stateful import StatefulLayer, TrainableArray
 from ...functional.surrogate import superspike_surrogate
-
-
-
 
 class SRM(StatefulLayer):
     """
@@ -60,16 +56,8 @@ class SRM(StatefulLayer):
         self.stop_reset_grad = stop_reset_grad
         self.layer = layer
 
-        if shape is None:
-            self.decay_constants = TrainableArray(decay_constants)
-            self.reset_val = TrainableArray(reset_val)
-        else:
-            _arr = jax.random.uniform(minval=.5,maxval=1.0, shape=shape, key=key)
-            self.decay_constants = TrainableArray(_arr) 
-            _arr = jax.random.uniform(minval=0.,maxval=2.0, shape=shape, key=key)
-            self.reset_val = TrainableArray(_arr) 
-
-
+        self.decay_constant = self.init_parameters(decay_constants, shape)
+        self.reset_val = self.init_parameters(reset_val, shape)
 
     def init_state(self, 
                    shape: Union[Sequence[int], int], 
@@ -78,7 +66,6 @@ class SRM(StatefulLayer):
                    **kwargs) -> Sequence[jnp.ndarray]:
         init_state_P = jnp.zeros(shape)
         init_state_Q = jnp.zeros(shape) # The synaptic currents are initialized as zeros
-        print(init_state_Q.shape)
         output = self.layer(init_state_Q)
         
         init_state_R = jnp.zeros(output.shape) # The synaptic currents are initialized as zeros
@@ -108,8 +95,6 @@ class SRM(StatefulLayer):
         R = gamma*R + reset_val*lax.stop_gradient(S)
         membrane_potential = self.layer(Q)-reset_val*R
         spike_output = self.spike_fn(membrane_potential - self.threshold)
-        
-
 
         state = [P, Q, R, spike_output]
         return state, spike_output
