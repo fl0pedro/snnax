@@ -7,6 +7,14 @@ import equinox as eqx
 from equinox import static_field
 from chex import Array, PRNGKey
 
+class TrainableArray(eqx.Module):
+    data: Array
+    requires_grad: bool
+
+    def __init__(self, array):
+        self.data = array
+        self.requires_grad = True
+
 class StatefulLayer(eqx.Module):
     """
     Base class to define custom spiking neuron types.
