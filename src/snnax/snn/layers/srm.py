@@ -15,6 +15,7 @@ class SRM(StatefulLayer):
     """
     layer: eqx.Module 
     decay_constants: Union[Sequence[float], jnp.ndarray, TrainableArray]     
+    r_decay_constants: Union[Sequence[float], jnp.ndarray, TrainableArray]     
     threshold: Union[float, jnp.ndarray] = static_field()
     spike_fn: Callable = static_field()
     reset_val: Optional[Union[float, jnp.ndarray, TrainableArray]]
@@ -23,22 +24,24 @@ class SRM(StatefulLayer):
     def __init__(self, 
                 layer: eqx.Module,
                 decay_constants: Union[Sequence[float], jnp.ndarray, TrainableArray],
+                r_decay_constants: Union[Sequence[float], jnp.ndarray, TrainableArray] = [.9],
                 *args,
                 spike_fn: Callable = superspike_surrogate(10.),
                 threshold: Union[float, jnp.ndarray] = 1.,
-                reset_val: Optional[Union[float, jnp.ndarray, TrainableArray]] = [0],
+                reset_val: Optional[Union[float, jnp.ndarray, TrainableArray]] = None,
                 stop_reset_grad: Optional[bool] = True,
                 init_fn: Optional[Callable] = None,
+                input_shape: Union[Sequence[int],int,None] = None,
                 shape: Union[Sequence[int],int,None] = None,
                 key: jrand.PRNGKey = jax.random.PRNGKey(0),
                 **kwargs) -> None:
         """**Arguments**:
-
+        - `input_shape`: Shape of the neuron layer.
         - `shape`: Shape of the neuron layer.
         - `decay_constants`: Decay constants for the leaky integrate-and-fire neuron.
             Index 0 describes the decay constant of the membrane potential,
             Index 1 describes the decay constant of the synaptic current.
-            Index 2 describes the decay constant of the refractory period.
+        - `r_decay_constants`: Decay constants for the refractory period.
         - `spike_fn`: Spike treshold function with custom surrogate gradient.
         - `threshold`: Spike threshold for membrane potential. Defaults to 1.
         - `reset_val`: Reset value after a spike has been emitted. Defaults to None.
@@ -56,9 +59,13 @@ class SRM(StatefulLayer):
         self.stop_reset_grad = stop_reset_grad
         self.layer = layer
 
-        self.decay_constants = self.init_parameters(decay_constants, shape)
+        self.decay_constants = self.init_parameters(decay_constants, input_shape)
+        self.r_decay_constants = self.init_parameters(r_decay_constants, shape)
         
-        self.reset_val = self.init_parameters(reset_val, shape, requires_grad=reset_val is not None)
+        if reset_val is not None:
+            self.reset_val = self.init_parameters([0], shape, requires_grad=False)
+        else:
+            self.reset_val = self.init_parameters(reset_val, shape, requires_grad=True)
 
     def init_state(self, 
                    shape: Union[Sequence[int], int], 
@@ -88,8 +95,8 @@ class SRM(StatefulLayer):
 
         alpha = jax.lax.clamp(0.5, self.decay_constants.data[0], 1.0)
         beta = jax.lax.clamp(0.5, self.decay_constants.data[1], 1.0)
-        gamma = jax.lax.clamp(0.5, self.decay_constants.data[2], 1.0)
-        reset_val = jax.lax.clamp(0.0, self.reset_val.data, 2.0)
+        gamma = jax.lax.clamp(0.5, self.r_decay_constants.data[0], 1.0)
+        reset_val = jax.lax.clamp(0.0, self.reset_val.data[0], 2.0)
 
         P = alpha*P + (1.-alpha)*synaptic_input
         Q = beta*Q + (1.-beta)*P
