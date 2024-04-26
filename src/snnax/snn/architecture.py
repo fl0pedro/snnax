@@ -324,3 +324,48 @@ class StatefulModel(eqx.Module):
 
         return new_states, new_outs         
 
+
+def checkpointed_scan(f, init, xs):
+    '''
+    Wrapper around equinox's checkpointed_while_loop to implement scan, does not return the output of the sequence, only the final state.
+    '''
+    import  equinox.internal._loop.checkpointed as ei
+    init = [0, init]
+    def _f(carry):
+        return [carry[0]+1,f(carry[1], xs[carry[0]])[0]]
+    
+    def cond(carry):
+        return True
+    
+    return ei.checkpointed_while_loop(cond, _f, init, max_steps=xs.shape[0])[1], None
+
+class CheckpointedStatefulModel(StatefulModel):
+    def __call__(self, 
+                input_states: Sequence[jnp.ndarray], 
+                input_batch,
+                key: jrand.PRNGKey,
+                burnin: int = 0) -> Tuple:
+        # Partial initialization of the forward function
+        forward_fn = ft.partial(self.forward_fn, 
+                                self.layers, 
+                                self.graph_structure,
+                                key)       
+        
+        # Performes the actual BPTT when differentiated
+        if burnin>0:
+            new_states, new_outs = checkpointed_scan(forward_fn, 
+                                            input_states, 
+                                            input_batch[:burnin])
+
+                    # Performes the actual BPTT when differentiated
+            new_states, new_outs = checkpointed_scan(forward_fn, 
+                                            jax.lax.stop_gradient(new_states), 
+                                            input_batch[burnin:])
+        else:
+            new_states, new_outs = checkpointed_scan(forward_fn, 
+                                            input_states, 
+                                            input_batch)
+
+            
+
+        return new_states, new_outs   
