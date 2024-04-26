@@ -219,9 +219,9 @@ class AdaptiveLIF(StatefulLayer):
 
     def __init__(self,
                 decay_constants: float,
-                ada_decay_constant: float = .8 ,
-                ada_step_val: float = 1.0,
-                ada_coupling_var: float = .5,
+                ada_decay_constant: float = [.8] ,
+                ada_step_val: float = [1.0],
+                ada_coupling_var: float = [.5],
                 spike_fn: Callable = superspike_surrogate(10.),
                 threshold: float = 1.,
                 stop_reset_grad: bool = True,
@@ -275,10 +275,10 @@ class AdaptiveLIF(StatefulLayer):
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
         mem_pot, ada_var = state[0], state[1]
 
-        alpha = jax.lax.clamp(0.5,self.decay_constants.data,1.)
-        beta = jax.lax.clamp(0.5, self.ada_decay_constant.data, 1.) 
-        a = jax.lax.clamp(-1.,self.ada_coupling_var.data,1.)
-        b = jax.lax.clamp(0.,self.ada_step_val.data,2.)
+        alpha = jax.lax.clamp(0.5,self.decay_constants.data[0],1.)
+        beta = jax.lax.clamp(0.5, self.ada_decay_constant.data[0], 1.) 
+        a = jax.lax.clamp(-1.,self.ada_coupling_var.data[0],1.)
+        b = jax.lax.clamp(0.,self.ada_step_val.data[0],2.)
 
         # Calculation of the membrane potential
         mem_pot = alpha*mem_pot + (1 - alpha)*(synaptic_input+ada_var)

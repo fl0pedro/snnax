@@ -29,16 +29,17 @@ class StatefulLayer(eqx.Module):
 
     @staticmethod
     def init_parameters(    parameters: Union[float, Sequence[float]], 
-                            shape: Optional[Union[int, Sequence[int]]] = None):
+                            shape: Optional[Union[int, Sequence[int]]] = None,
+                            requires_grad: bool = True):
         if shape is None:
-            _p = TrainableArray(parameters)
+            _p = TrainableArray(parameters, requires_grad)
         else:
             if isinstance(parameters[0], Sequence):
                 assert all([d.shape == shape for d in parameters]), "Shape of decay constants does not match the provided shape"
-                _p = TrainableArray(_arr)
+                _p = TrainableArray(_arr, requires_grad)
             else:
                 _arr = jnp.array([jnp.ones(shape, dtype=jnp.float32)*d for d in parameters])
-                _p = TrainableArray(_arr)
+                _p = TrainableArray(_arr, requires_grad)
         return _p
 
     def init_state(self, 

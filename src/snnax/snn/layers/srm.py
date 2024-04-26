@@ -26,7 +26,7 @@ class SRM(StatefulLayer):
                 *args,
                 spike_fn: Callable = superspike_surrogate(10.),
                 threshold: Union[float, jnp.ndarray] = 1.,
-                reset_val: Optional[Union[float, jnp.ndarray, TrainableArray]] = None,
+                reset_val: Optional[Union[float, jnp.ndarray, TrainableArray]] = [0],
                 stop_reset_grad: Optional[bool] = True,
                 init_fn: Optional[Callable] = None,
                 shape: Union[Sequence[int],int,None] = None,
@@ -56,8 +56,9 @@ class SRM(StatefulLayer):
         self.stop_reset_grad = stop_reset_grad
         self.layer = layer
 
-        self.decay_constant = self.init_parameters(decay_constants, shape)
-        self.reset_val = self.init_parameters(reset_val, shape)
+        self.decay_constants = self.init_parameters(decay_constants, shape)
+        
+        self.reset_val = self.init_parameters(reset_val, shape, requires_grad=reset_val is not None)
 
     def init_state(self, 
                    shape: Union[Sequence[int], int], 
