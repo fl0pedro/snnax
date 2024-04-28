@@ -13,6 +13,7 @@ from chex import Array, PRNGKey
 from jaxtyping import PyTree
 from .layers.stateful import StatefulLayer, RequiresStateLayer
 
+
 class GraphStructure(NamedTuple):
     """
     This class contains meta-information about the computational graph.
@@ -59,9 +60,9 @@ def default_forward_fn(layers: Sequence[eqx.Module],
         # specifies a connection
 
         # If the node is also a input layer, also append external input
-        if ilayer in struct.input_layer_ids:
-            inputs.append(batch)
-            inputs_v.append(batch)
+        # if ilayer in struct.input_layer_ids:
+        #     inputs.append(batch)
+        #     inputs_v.append(batch)
 
 #        inputs = [new_outs[id] for id in struct.input_connectivity[ilayer]]
         inputs = [states[layer_id][-1] for layer_id in struct.input_connectivity[ilayer]]
@@ -94,6 +95,7 @@ def default_forward_fn(layers: Sequence[eqx.Module],
 
     new_carry = new_states
     return new_carry, new_outs 
+
 
 def debug_forward_fn(layers: Sequence[eqx.Module], 
                         struct: GraphStructure, 
@@ -157,6 +159,7 @@ def debug_forward_fn(layers: Sequence[eqx.Module],
 
     new_carry = new_states
     return new_carry, new_outs 
+
 
 ## Commented because needs to be fixed with new state and output format (see default forward)
 # def delayed_forward_fn(layers: Sequence[eqx.Module], 
