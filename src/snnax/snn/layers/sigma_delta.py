@@ -2,7 +2,6 @@ import jax
 import jax.lax as lax
 import jax.numpy as jnp
 import jax.random as jrand
-import equinox as eqx
 
 from .stateful import StatefulLayer
 from typing import Sequence, Optional, Callable, Union
@@ -61,12 +60,9 @@ class SigmaDelta(StatefulLayer):
         act = act_new
         return [sigma, act_new, act, residue, s_out], s_out
   
-     
-
     def __call__(self, state: Sequence[jnp.ndarray], 
                  synaptic_input: jnp.ndarray, 
                  *, key: Optional[jrand.PRNGKey] = None) -> Sequence[jnp.ndarray]:
         state = self.sigma_decoder(state, synaptic_input)
         return self.delta_encoder(state)
         
-
