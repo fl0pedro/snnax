@@ -35,7 +35,7 @@ class GraphStructure(NamedTuple):
 def default_forward_fn(layers: Sequence[eqx.Module], 
                         struct: GraphStructure, 
                         key: PRNGKey,
-                        carry: Sequence[Array], 
+                        states: Sequence[Array], 
                         data: PyTree) -> Tuple:
     """
     Computes the forward pass through the layers in a straight-through manner,
@@ -46,13 +46,11 @@ def default_forward_fn(layers: Sequence[eqx.Module],
         - `layers`: Specifies the number of layers we want to have in our model.
         - `struct`: Specifies which layers are provided with external input
         - `key`: Specifies which layers provide the output of the model.
-        - `carry`: Specifies how the layers are connected to each other. 
+        - `states`: Specifies how the layers are connected to each other. 
         - `data`: Input data of the model.
     """
-    # TODO remove instance checks because they are a performance bottleneck
     keys = jrand.split(key, len(layers))
     new_states, new_outs = [], []
-    states = carry
     # data = data if isinstance(data, Sequence) else [data]
     batch = batch if isinstance(data, Sequence) else [data]
 
@@ -101,7 +99,7 @@ def default_forward_fn(layers: Sequence[eqx.Module],
 def debug_forward_fn(layers: Sequence[eqx.Module], 
                         struct: GraphStructure, 
                         key: PRNGKey,
-                        carry: Tuple[Sequence[Array], Sequence[Array]], 
+                        states: Tuple[Sequence[Array], Sequence[Array]], 
                         data: PyTree) -> Tuple[Sequence[Array], Sequence[Array]]:
     """
     Computes the forward pass through the layers in a delayed manner,
@@ -120,7 +118,6 @@ def debug_forward_fn(layers: Sequence[eqx.Module],
     # TODO remove instance checks because they are a performance bottleneck
     keys = jrand.split(key, len(layers))
     new_states, new_outs = [], []
-    states = carry
     batch = batch if isinstance(data, Sequence) else [data]
 
     for ilayer, (key, state, layer) in enumerate(zip(keys, states, layers)):
@@ -270,7 +267,7 @@ class StatefulModel(eqx.Module):
             # specifies a connection
             inputs = []
             for id in struct.input_connectivity[ilayer]:
-                if id<ilayer:
+                if id < ilayer:
                     inputs = inputs+[outs[id]]
             
             # If the node is also a input layer, also append external input
@@ -320,14 +317,14 @@ class StatefulModel(eqx.Module):
                                 key)       
         
         # Performes the actual BPTT when differentiated
-        if burnin>0:
+        if burnin > 0:
             new_states, new_outs = lax.scan(forward_fn, 
                                             input_states, 
                                             input_batch[:burnin])
 
                     # Performes the actual BPTT when differentiated
             new_states, new_outs = lax.scan(forward_fn, 
-                                            jax.lax.stop_gradient(new_states), 
+                                            lax.stop_gradient(new_states), 
                                             input_batch[burnin:])
         else:
             new_states, new_outs = lax.scan(forward_fn, 

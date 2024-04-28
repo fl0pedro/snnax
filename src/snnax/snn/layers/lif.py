@@ -6,7 +6,7 @@ import jax.lax as lax
 import jax.numpy as jnp
 import jax.random as jrand
 
-from equinox import static_field, Module
+from equinox import static_field
 
 from .stateful import StatefulLayer, TrainableArray
 from ...functional.surrogate import superspike_surrogate
