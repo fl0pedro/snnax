@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Tue 28 Mar 2023 12:44:33 PM CEST
-# Last Modified : Fri 26 Apr 2024 09:18:46 PM CEST
+# Last Modified : Tue 23 Apr 2024 09:11:02 PM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
@@ -35,7 +35,7 @@ class SNNMLP(eqx.Module):
                  norm: bool = True,
                  num_hid_layers: int = 1,
                  use_bias: bool = True,
-                 neuron_model: str = 'snnax.snn.LIFSoftReset',
+                 neuron_model: str = 'snnax.snn.layers.srm.SRM',
                  key = jrandom.PRNGKey(0),                 
                  **kwargs):
         
@@ -89,17 +89,17 @@ class SNNMLP(eqx.Module):
             ro = np.minimum(self.ro_int, out[-1].shape[0])
             return out[-1][::-ro]
 
+    def embed(self, x, key):
+        state = self.cell.init_state(x[0,:].shape, key)
+        state, out = self.cell(state, x, key, burnin=self.burnin)
+        return out[-1][-1]
+
     def get_cumsum(self,x,key, seqlen=None):
         state = self.cell.init_state(x[0,:].shape, key)
         state, out = self.cell(state, x, key, burnin=self.burnin)
         seq = out[-1]
         f = lambda n: jnp.tile(jnp.arange(out[-1].shape[0])<(n-self.burnin), (out[-1].shape[1],1)).T
         return (f(seqlen)*seq).sum(axis=0)
-
-    def embed(self, x, key):
-        state = self.cell.init_state(x[0,:].shape, key)
-        state, out = self.cell(state, x, key, burnin=self.burnin)
-        return out[-1][-1]
     
     def get_final_states(self, x, key, seqlen=None):
         state = self.cell.init_state(x[0,:].shape, key)
@@ -116,12 +116,16 @@ def make_layers(in_channels, hid_channels, out_channels, key, neuron_model, size
     for i in range(num_hid_layers):
         m = []
         init_key, key = jrandom.split(key,2)
-        m.append(eqx.nn.Linear(in_channels, hid_channels*size_factor, key=init_key, use_bias=use_bias))
+        mm = []
+        mm.append(eqx.nn.Linear(in_channels, hid_channels*size_factor, key=init_key, use_bias=use_bias))
         if norm:
-            m.append(eqx.nn.LayerNorm(shape=[hid_channels*size_factor],elementwise_affine=False, eps=1e-4))
+            mm.append(eqx.nn.LayerNorm(shape=[hid_channels*size_factor],elementwise_affine=False, eps=1e-4))
+        layer = eqx.nn.Sequential(mm)
         m.append(neuron_model(decay_constants = [alpha,beta], 
+                              layer = layer,
                               spike_fn=surr, 
-                              reset_val=1,
+                              reset_val=[1.],
+                              input_shape=[in_channels],
                               shape=[hid_channels*size_factor],
                               key=init_key
                               ))
