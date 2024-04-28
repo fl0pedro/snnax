@@ -80,11 +80,12 @@ class HeidelbergDigits(Dataset):
         print('faa',ds)
         # Data augmentation
         if use_augm and split == "train":
+            print('blsh')
             transforms = [
                 RandomApply([PolarityInversion()], p=0.8),
                 RandomApply([Noise(min_snr, max_snr)], p_noise),
                 RandomApply([Gain()], p=0.3),
-                RandomApply([Reverb(sample_rate=16000)], p=0.6),
+                RandomApply([Reverb(sample_rate=16000/ds)], p=0.6),
 
             ]
             self.transf = ComposeMany(transforms, num_augmented_samples=1)
@@ -187,7 +188,7 @@ class SpeechCommands(Dataset):
                 RandomApply([PolarityInversion()], p=0.8),
                 RandomApply([Noise(min_snr, max_snr)], p_noise),
                 RandomApply([Gain()], p=0.3),
-                RandomApply([Reverb(sample_rate=16000)], p=0.6),
+                RandomApply([Reverb(sample_rate=16000/ds)], p=0.6),
             ]
             self.transf = ComposeMany(transforms, num_augmented_samples=1)
         else:

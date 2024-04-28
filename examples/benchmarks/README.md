@@ -38,14 +38,19 @@ XLA_PYTHON_CLIENT_PREALLOCATE=false python3 train_dataset_model.py -m model.snn_
 XLA_PYTHON_CLIENT_PREALLOCATE=false python3 train_dataset_model.py -m model.snn_decolle.snn_decolle -d benchmark_datasets.dvs_gestures -c parameters/config_snn_dvsgestureattn.yaml -l utils.create_cls_func_multixent
 ```
 
-### Examples to train SNN models with various neuron models on the SHD dataset, using variable sequence length
+### Examples to train SNN models with various neuron models on the HD dataset, using variable sequence length
 #### SNN MLP with Adaptive LIF 
 ```
 XLA_PYTHON_CLIENT_PREALLOCATE=false python3  train_dataset_model.py -m model.snn_mlp.snn_mlp -d benchmark_datasets.heidelberg_spoken_digits -c parameters/config_snnmlp_shd.yaml -l utils.create_cls_func_xent_variable_seqlen  
 ```
-
 #### SNN MLP with Standard LIF with soft reset
 ```
 # Different model arguments can be usd to tweak the yaml configuration file, like this:
 XLA_PYTHON_CLIENT_PREALLOCATE=false python3  train_dataset_model.py -m model.snn_mlp.snn_mlp -d benchmark_datasets.heidelberg_spoken_digits -c parameters/config_snnmlp_shd.yaml -l utils.create_cls_func_xent_variable_seqlen  --model_kwargs neuron_model='snnax.snn.LIFSoftReset'
 ```
+
+### Same on the SHD dataset
+```
+XLA_PYTHON_CLIENT_PREALLOCATE=false python3  train_dataset_model.py -m model.snn_mlp.snn_mlp -d benchmark_datasets.spiking_heidelberg_spoken_digits -c parameters/config_snnmlp_shd.yaml -l utils.create_cls_func_xent_variable_seqlen  
+```
+

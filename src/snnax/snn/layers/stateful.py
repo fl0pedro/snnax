@@ -2,10 +2,19 @@ from typing import Sequence, Union, Callable, Optional
 
 import jax
 import jax.numpy as jnp
+from typing import Sequence, Union, Callable, Optional, Tuple, List
 
 import equinox as eqx
 from equinox import static_field
 from chex import Array, PRNGKey
+
+class TrainableArray(eqx.Module):
+    data: Array
+    requires_grad: bool
+
+    def __init__(self, data: Array, requires_grad: bool = True):
+        self.data = data
+        self.requires_grad = requires_grad
 
 class StatefulLayer(eqx.Module):
     """
@@ -18,12 +27,27 @@ class StatefulLayer(eqx.Module):
             init_fn = lambda x, key, *args, **kwargs: jnp.zeros(x)
         self.init_fn = init_fn
 
+    @staticmethod
+    def init_parameters(    parameters: Union[float, Sequence[float]], 
+                            shape: Optional[Union[int, Sequence[int]]] = None,
+                            requires_grad: bool = True):
+        if shape is None:
+            _p = TrainableArray(parameters, requires_grad)
+        else:
+            if isinstance(parameters[0], Sequence):
+                assert all([d.shape == shape for d in parameters]), "Shape of decay constants does not match the provided shape"
+                _p = TrainableArray(_arr, requires_grad)
+            else:
+                _arr = jnp.array([jnp.ones(shape, dtype=jnp.float32)*d for d in parameters])
+                _p = TrainableArray(_arr, requires_grad)
+        return _p
+
     def init_state(self, 
                     shape: Union[int, Sequence[int]], 
                     key: PRNGKey, 
                     *args, 
                     **kwargs):
-        return jnp.stack([self.init_fn(shape, key, *args, **kwargs), zeros(shape, key)])
+        return [self.init_fn(shape, key, *args, **kwargs), jnp.zeros(shape)]
 
     def init_out(self, 
                 shape: Union[int, Sequence[int]], *, 
