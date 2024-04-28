@@ -10,7 +10,7 @@ from .functional import sigmoid
 # 'The remarkable robustness of surrogate gradient learning 
 # for instilling complex function in spiking neural networks'
 # by Zenke and Vogels (https://www.biorxiv.org/content/10.1101/2020.06.29.176925v1) 
-def superspike_surrogate(beta=10.): # 
+def superspike_surrogate(beta=10.): 
 
     @custom_jvp
     def heaviside_with_super_spike_surrogate(x):
@@ -47,6 +47,7 @@ def sigmoid_surrogate(beta=1.): # set default to 1. or 10. ?
         return primal_out, tangent_out
 
     return heaviside_with_sigmoid_surrogate
+
 
 def piecewise_surrogate(beta=.5): # set default to 1. or 10. ?
     @custom_jvp

@@ -9,6 +9,7 @@ import equinox as eqx
 from .stateful import StatefulLayer, TrainableArray
 from ...functional.surrogate import superspike_surrogate
 
+
 class SRM(StatefulLayer):
     """
     TODO
@@ -106,5 +107,4 @@ class SRM(StatefulLayer):
 
         state = [P, Q, R, spike_output]
         return state, spike_output
-
 

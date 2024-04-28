@@ -1,15 +1,16 @@
 from typing import Sequence, Union, Callable, Optional, Tuple, List
 
 import jax
+import jax.nn as jnn
 import jax.lax as lax
 import jax.numpy as jnp
+import jax.random as jrand
 
 from equinox import static_field, Module
 
 from .stateful import StatefulLayer, TrainableArray
 from ...functional.surrogate import superspike_surrogate
 from chex import Array, PRNGKey
-
 
 
 class SimpleLIF(StatefulLayer):
@@ -58,30 +59,27 @@ class SimpleLIF(StatefulLayer):
 
         self.decay_constants = self.init_parameters(decay_constants, shape)
 
-
     def __call__(self, 
                 state: Array, 
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
-        alpha = jax.lax.clamp(0.5, self.decay_constants.data[0], 1.0)
+        alpha = lax.clamp(0.5, self.decay_constants.data[0], 1.0)
         mem_pot = state[0]
         mem_pot = alpha*mem_pot + (1.-alpha)*synaptic_input # TODO with (1-alpha) or without ?
         spike_output = self.spike_fn(mem_pot-self.threshold)
 
-        
         if self.reset_val is None:
             reset_pot = mem_pot*spike_output
         else:
-            reset_val = jax.nn.softplus(self.reset_val)
+            reset_val = jnn.softplus(self.reset_val)
             reset_pot = reset_val * spike_output
         # optionally stop gradient propagation through refectory potential       
         refectory_potential = lax.stop_gradient(reset_pot) if self.stop_reset_grad else reset_pot
         mem_pot = mem_pot - refectory_potential
         
-
-
         state = [mem_pot,  spike_output]
         return [state, spike_output]
+
 
 class LIF(StatefulLayer):
     """
@@ -147,7 +145,7 @@ class LIF(StatefulLayer):
     def __call__(self, 
                 state: Sequence[jnp.ndarray], 
                 synaptic_input: jnp.ndarray,
-                *, key: Optional[jax.random.PRNGKey] = None) -> Sequence[jnp.ndarray]:
+                *, key: Optional[jrand.PRNGKey] = None) -> Sequence[jnp.ndarray]:
         mem_pot, syn_curr, spike_output = state[0], state[1], state[2]
         
         if self.reset_val is None:
@@ -159,8 +157,8 @@ class LIF(StatefulLayer):
         refectory_potential = lax.stop_gradient(reset_pot) if self.stop_reset_grad else reset_pot
         mem_pot = mem_pot - refectory_potential
 
-        alpha = jax.lax.clamp(0.5,self.decay_constants.data[0], 1.0)
-        beta  = jax.lax.clamp(0.5,self.decay_constants.data[1], 1.0)
+        alpha = lax.clamp(0.5, self.decay_constants.data[0], 1.0)
+        beta  = lax.clamp(0.5, self.decay_constants.data[1], 1.0)
         
         mem_pot = alpha*mem_pot + (1.-alpha)*syn_curr
         syn_curr = beta*syn_curr + (1-beta)*synaptic_input
@@ -169,6 +167,7 @@ class LIF(StatefulLayer):
 
         state = [mem_pot, syn_curr, spike_output]
         return [state, spike_output]
+    
     
 class LIFSoftReset(LIF):
     """
@@ -180,7 +179,7 @@ class LIFSoftReset(LIF):
     def __call__(self, 
                 state: Sequence[jnp.ndarray], 
                 synaptic_input: jnp.ndarray,
-                *, key: Optional[jax.random.PRNGKey] = None) -> Sequence[jnp.ndarray]:
+                *, key: Optional[jrand.PRNGKey] = None) -> Sequence[jnp.ndarray]:
         mem_pot, syn_curr, spike_output = state[0], state[1], state[2]
         
         if self.reset_val is None:
@@ -192,8 +191,8 @@ class LIFSoftReset(LIF):
         refr_pot = lax.stop_gradient(reset_pot) if self.stop_reset_grad else reset_pot
         mem_pot = mem_pot - refr_pot
 
-        alpha = jax.lax.clamp(0.5,self.decay_constants.data[0], 1.0)
-        beta  = jax.lax.clamp(0.5,self.decay_constants.data[1], 1.0)
+        alpha = lax.clamp(0.5, self.decay_constants.data[0], 1.0)
+        beta  = lax.clamp(0.5, self.decay_constants.data[1], 1.0)
  
         mem_pot = alpha*mem_pot + (1.-alpha)*syn_curr
         syn_curr = beta*syn_curr + (1-beta)*synaptic_input
@@ -202,6 +201,7 @@ class LIFSoftReset(LIF):
 
         state = [mem_pot, syn_curr, spike_output]
         return [state, spike_output]
+
 
 class AdaptiveLIF(StatefulLayer):
     """
@@ -228,7 +228,7 @@ class AdaptiveLIF(StatefulLayer):
                 reset_val: Optional[float] = None,
                 init_fn: Optional[Callable] = None,
                 shape: Union[Sequence[int],int, None] = None,
-                key: PRNGKey = jax.random.PRNGKey(0)) -> None:
+                key: PRNGKey = jrand.PRNGKey(0)) -> None:
         """**Arguments**:
 
         - `decay_constants`: Decay constants for the adaptive LIF neuron.
@@ -275,13 +275,13 @@ class AdaptiveLIF(StatefulLayer):
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
         mem_pot, ada_var = state[0], state[1]
 
-        alpha = jax.lax.clamp(0.5,self.decay_constants.data[0],1.)
-        beta = jax.lax.clamp(0.5, self.ada_decay_constant.data[0], 1.) 
-        a = jax.lax.clamp(-1.,self.ada_coupling_var.data[0],1.)
-        b = jax.lax.clamp(0.,self.ada_step_val.data[0],2.)
+        alpha = lax.clamp(0.5,self.decay_constants.data[0],1.)
+        beta = lax.clamp(0.5, self.ada_decay_constant.data[0], 1.) 
+        a = lax.clamp(-1.,self.ada_coupling_var.data[0], 1.)
+        b = lax.clamp(0.,self.ada_step_val.data[0], 2.)
 
         # Calculation of the membrane potential
-        mem_pot = alpha*mem_pot + (1 - alpha)*(synaptic_input+ada_var)
+        mem_pot = alpha*mem_pot + (1.-alpha)*(synaptic_input+ada_var)
         # membrane_potential_new = alpha*membrane_potential + (1-alpha)*(synaptic_input + ada_var) # TODO with (1-alpha) or without ?
         spike_output = self.spike_fn(mem_pot - self.threshold)
         

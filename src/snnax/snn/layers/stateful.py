@@ -8,6 +8,7 @@ import equinox as eqx
 from equinox import static_field
 from chex import Array, PRNGKey
 
+
 class TrainableArray(eqx.Module):
     data: Array
     requires_grad: bool
@@ -15,6 +16,7 @@ class TrainableArray(eqx.Module):
     def __init__(self, data: Array, requires_grad: bool = True):
         self.data = data
         self.requires_grad = requires_grad
+
 
 class StatefulLayer(eqx.Module):
     """
@@ -28,9 +30,9 @@ class StatefulLayer(eqx.Module):
         self.init_fn = init_fn
 
     @staticmethod
-    def init_parameters(    parameters: Union[float, Sequence[float]], 
-                            shape: Optional[Union[int, Sequence[int]]] = None,
-                            requires_grad: bool = True):
+    def init_parameters(parameters: Union[float, Sequence[float]], 
+                        shape: Optional[Union[int, Sequence[int]]] = None,
+                        requires_grad: bool = True):
         if shape is None:
             _p = TrainableArray(parameters, requires_grad)
         else:
@@ -61,11 +63,11 @@ class StatefulLayer(eqx.Module):
                 key: Optional[PRNGKey] = None):
         pass
         
+        
 class RequiresStateLayer(eqx.Module):
     """
     Base class to define custom spiking neuron types.
     """
     def __call__(self, state):
         raise NotImplementedError
-
 

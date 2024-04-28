@@ -53,16 +53,17 @@ def default_forward_fn(layers: Sequence[eqx.Module],
     keys = jrand.split(key, len(layers))
     new_states, new_outs = [], []
     states = carry
-    data = data if isinstance(data, Sequence) else [data]
+    # data = data if isinstance(data, Sequence) else [data]
+    batch = batch if isinstance(data, Sequence) else [data]
 
     for ilayer, (key, state, layer) in enumerate(zip(keys, states, layers)):
         # Grab output from nodes for which the connectivity graph 
         # specifies a connection
 
         # If the node is also a input layer, also append external input
-        # if ilayer in struct.input_layer_ids:
-        #     inputs.append(batch)
-        #     inputs_v.append(batch)
+        if ilayer in struct.input_layer_ids:
+            inputs.append(batch)
+            inputs_v.append(batch)
 
 #        inputs = [new_outs[id] for id in struct.input_connectivity[ilayer]]
         inputs = [states[layer_id][-1] for layer_id in struct.input_connectivity[ilayer]]
