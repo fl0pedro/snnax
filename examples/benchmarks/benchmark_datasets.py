@@ -362,6 +362,31 @@ def spiking_heidelberg_spoken_digits(batch_size, dt=1e-3, steps_per_dt = None, d
     dt_te = load_shd_or_ssc('shd','data/SHD','test',  batch_size=batch_size, ds=ds, workers=num_workers)
     return dt_tr, dt_te, None, [700], 20
 
+#def primate_reaching(batch_size=72,
+#                     dt=1e-3,
+#                     steps_per_dt=None,
+#                     ds=4,
+#                     n_events_attention=None,
+#                     seqlen_train=500,
+#                     seqlen_test=1800,
+#                     num_workers=8,
+#                     root="./data",
+#                     **dl_kwargs):
+def primate_reaching(batch_size=72, dt=1e-3):
 
+    from neurobench.datasets import PrimateReaching
+    from torch.utils.data import DataLoader, Subset
 
+    filename = "indy_20160622_01"
+
+    # The dataloader and preprocessor has been combined together into a single class
+    data_dir = "../../../data/primate_reaching/PrimateReachingDataset/"
+    dataset = PrimateReaching(file_path=data_dir, filename=filename,
+                              num_steps=1, train_ratio=0.5, bin_width=0.004,
+                              biological_delay=0, remove_segments_inactive=False)
+
+    train_set_loader = DataLoader(Subset(dataset, dataset.ind_test), batch_size=batch_size, shuffle=False)
+    test_set_loader = DataLoader(Subset(dataset, dataset.ind_test), batch_size=batch_size, shuffle=False)
+
+    return train_set_loader, test_set_loader, None, [96], 2
 
