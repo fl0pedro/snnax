@@ -62,7 +62,7 @@ class SRM(StatefulLayer):
         self.decay_constants = self.init_parameters(decay_constants, input_shape)
         self.r_decay_constants = self.init_parameters(r_decay_constants, shape)
         
-        if reset_val is not None:
+        if reset_val is None:
             self.reset_val = self.init_parameters([0], shape, requires_grad=False)
         else:
             self.reset_val = self.init_parameters(reset_val, shape, requires_grad=True)
