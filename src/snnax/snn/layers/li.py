@@ -22,7 +22,6 @@ class LI(StatefulLayer):
                 decay_constants: float,
                 init_fn: Optional[Callable] = None) -> None:
         """**Arguments**:
-
         - `decay_constants`: Decay constant of the leaky integrator.
         - `init_fn`: Function to initialize the initial state of the spiking neurons.
             Defaults to initialization with zeros if nothing else is provided.

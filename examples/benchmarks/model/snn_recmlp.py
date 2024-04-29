@@ -113,12 +113,13 @@ class SNNMLP(eqx.Module):
         else:
             return states, out[-1][seqlen-self.burnin,:]
 
+
 def make_layers(in_channels, hid_channels, out_channels, key, neuron_model, size_factor=1, use_bias=True, num_hid_layers=2, alpha=0.95, beta=.85, norm=False):
-    surr = sr(beta = 10.0)
+    surr = sr(beta=10.)
     shapes = []
     layers = [snn.Flatten()]
     shapes.append(in_channels)
-    for i in range(num_hid_layers):
+    for _ in range(num_hid_layers):
         m = []
         init_key, key = jrandom.split(key,2)
         _out_s = hid_channels*size_factor
@@ -144,6 +145,7 @@ def make_layers(in_channels, hid_channels, out_channels, key, neuron_model, size
     print('Debug', len(layers))
     return layers, shapes
 
+
 def _model_init(model):
     ## Custom code ensures that only  conv layers are trained
     import jax.tree_util as jtu
@@ -162,6 +164,7 @@ def _model_init(model):
     filter_spec = apply_to_tree_leaf_bytype(filter_spec, 'requires_grad', 'data', lambda _: True)
     
     return model, filter_spec
+
 
 def snn_mlp(input_size=[2,32,32], out_channels=10, key = jax.random.PRNGKey(0), **kwargs):
     return _model_init(SNNMLP(in_channels = np.prod(input_size), out_channels=out_channels, key = key, **kwargs))

@@ -111,3 +111,4 @@ def gen_feed_forward_struct(num_layers: int) -> Tuple[Sequence[int], Sequence[in
 #    input_layer_ids[0] = [0]
 #    final_layer_ids = [num_layers-1]
 #    return input_connectivity, input_layer_ids, final_layer_ids
+
