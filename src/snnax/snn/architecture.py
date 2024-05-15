@@ -46,13 +46,13 @@ def default_forward_fn(layers: Sequence[eqx.Module],
         - `layers`: Specifies the number of layers we want to have in our model.
         - `struct`: Specifies which layers are provided with external input
         - `key`: Specifies which layers provide the output of the model.
-        - `states`: Specifies how the layers are connected to each other. 
+        - `states`: States as returned by init_state 
         - `data`: Input data of the model.
     """
     keys = jrand.split(key, len(layers))
     new_states, new_outs = [], []
-    # data = data if isinstance(data, Sequence) else [data]
     batch = batch if isinstance(data, Sequence) else [data]
+    data = data if isinstance(data, Sequence) else [data]
 
     for ilayer, (key, state, layer) in enumerate(zip(keys, states, layers)):
         # Grab output from nodes for which the connectivity graph 
@@ -64,15 +64,26 @@ def default_forward_fn(layers: Sequence[eqx.Module],
             inputs_v.append(batch)
 
 #        inputs = [new_outs[id] for id in struct.input_connectivity[ilayer]]
-        inputs = [states[layer_id][-1] for layer_id in struct.input_connectivity[ilayer]]
-        inputs_v = [states[layer_id][0] for layer_id in struct.input_connectivity[ilayer]]
+		#suboptimal solution below, won't generalize to deeper states
+        inputs = []
+        inputs_v = []
+        for layer_id in struct.input_connectivity[ilayer]:
+            if type(states[layer_id][-1]) == list:
+                inputs.append(states[layer_id][-1][-1])
+                inputs_v.append(states[layer_id][-1][0])
+            else:
+                inputs.append(states[layer_id][-1])
+                inputs_v.append(states[layer_id][-1])
+
+
         
         # If the layer also gets external input append it as well
         external_inputs = [data[id] for id in struct.input_layer_ids[ilayer]]
         inputs += external_inputs
         inputs_v += external_inputs
         
-        inputs   = jnp.concatenate(inputs  , axis=0)
+        if len(inputs)==1:
+            inputs   = jnp.concatenate(inputs  , axis=0)
         inputs_v = jnp.concatenate(inputs_v, axis=0)
 
         # Check if layer is a StatefulLayer
@@ -240,8 +251,8 @@ class StatefulModel(eqx.Module):
 
     def init_state(self, 
                    in_shape: Union[Sequence[Tuple[int]], Tuple[int]], 
-                   shapes: Union[Sequence[Tuple[int]], None],
-                   key: PRNGKey) -> Sequence[Array]:
+                   shapes: Union[Sequence[Tuple[int]], None] = None,
+                   key: PRNGKey = jax.random.PRNGKey(0)) -> Sequence[Array]:
         """
         Init function that recursively calls the init functions of the stateful
         layers. Non-stateful layers are initialized as None and their output

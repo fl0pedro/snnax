@@ -271,8 +271,8 @@ class AdaptiveLIF(StatefulLayer):
 
     def __call__(self, 
                 state: Sequence[Array], 
-                synaptic_input: Array, *, 
-                key: Optional[PRNGKey] = None) -> Sequence[Array]:
+                synaptic_input: Array,  
+                *, key: Optional[PRNGKey] = None) -> Sequence[Array]:
         mem_pot, ada_var = state[0], state[1]
 
         alpha = lax.clamp(0.5,self.decay_constants.data[0],1.)
