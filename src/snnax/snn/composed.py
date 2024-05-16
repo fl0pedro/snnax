@@ -43,81 +43,48 @@ class Sequential(StatefulModel):
     def __call__(self, state, data, key, **kwargs) -> Tuple[Sequence, Sequence]:
         return super().__call__(state, data, key, **kwargs)
 
-class SequentialFeedback(StatefulModel):
-    """
-    Convenience class to construct a feed-forward spiking neural network with self recurrent connections in a
-    simple manner. It supports the defined StatefulLayer neuron types as well 
-    as equinox layers. Under the hood it constructs a connectivity graph 
-    with a feed-forward structure and local recurrent connections and feeds it to the StatefulModel class.
-    """
-
-    def __init__(self, 
-                *layers: Sequence[eqx.Module],
-                forward_fn: Callable = default_forward_fn,
-                feedback_layers = None,
-                ) -> None:
-        """**Arguments**:
-        - `layers`: Sequence containing the layers of the network in causal order.
-        """
-        num_layers = len(list(layers))
-        input_connectivity, input_layer_ids, final_layer_ids = gen_feed_forward_struct(num_layers)
-
-        # Constructing the connectivity graph
-        graph_structure = GraphStructure(
-            num_layers = num_layers,
-            input_layer_ids = input_layer_ids,
-            final_layer_ids = final_layer_ids,
-            input_connectivity = input_connectivity)
-
-        if feedback_layers is None:
-            for i, l in enumerate(layers):
-                input_connectivity[i].append(i)
-        else:
-            for i, (k, l) in enumerate(feedback_layers.items()):
-                input_connectivity[l].append(k)
-
-        super().__init__(graph_structure, list(layers), forward_fn = forward_fn)
-
-    def __getitem__(self, idx: int) -> eqx.Module:
-        return self.layers[idx]
-
-    def __len__(self) -> int:
-        return len(self.layers)
-
-    def __call__(self, state, data, key, **kwargs) -> Tuple[Sequence, Sequence]:
-        return super().__call__(state, data, key, **kwargs)
-
-
-def gen_feed_forward_struct(num_layers: int) -> Tuple[Sequence[int], Sequence[int], Sequence[int]]:
-    """
-    Function to construct a simple feed-forward connectivity graph from the
-    given number of layers. This means that every layer is just connected to 
-    the next one. 
-    """
-    input_connectivity = [[id] for id in range(-1, num_layers-1)]
-    input_connectivity[0] = []
-    input_layer_ids = [[] for id in range(0, num_layers)]
-    input_layer_ids[0] = [0]
-    final_layer_ids = [num_layers-1]
-    return input_connectivity, input_layer_ids, final_layer_ids
-
 class Parallel(eqx.Module):
+    """
+    Convenience class to concatenate layers in a spiking neural network in a
+    simple manner. The inputs  provided as a list in the same order as the
+    layers are distributed to each layer. The output is the sum of all layers.
+    It supports the defined StatefulLayer neuron types as well as equinox
+    layers. 
+    """
     layers: Sequence[eqx.Module]
 
     def __init__(self, layers):
+        """
+        **Arguments**:
+        - `layers`: Sequence containing the equinox modules and snnax stateful
+          models of the network order. The order used must be the same as the
+          order used in the __call__ function. The output dimensions of layers
+          must be broadcastable to the same shape under a sum operation.
+        """
         self.layers = layers
 
-    def __call__(self, inputs, key):
-        h = [l(x) for l,x in zip(self.layers,inputs)]
+    def __call__(self, inputs, key: PRNGKey = jax.random.PRNGKey(0)):
+        """
+        **Arguments**:
+        - `inputs`: Sequence containing the inputs to each layer
+        - `key`: JAX PRNGKey
+        """
+        h = [l(x) for l,x in zip(self.layers, inputs)]
         return sum(h)
 
 class CompoundLayer(StatefulLayer):
     '''
-    This is a convenience class that groups together several Equinox modules. This 
-    is useful for convieniently addressing compound layers. For instance:
-    eqx.Linear()
-    eqx.LayerNorm()
-    snn.LIF()
+    This class that groups together several Equinox modules. This 
+    is useful for convieniently addressing compound layers as a single one.
+    It is essentially like an equinox module but with the proper handling 
+    of the compound state.
+    
+    Example:
+    
+    `layers = [eqx.Linear(),
+               eqx.LayerNorm(),
+               snn.LIF()]
+    compound_layer = CompoundLayer(*layers)`
     '''
 
     layers: Sequence[eqx.Module]
@@ -125,6 +92,11 @@ class CompoundLayer(StatefulLayer):
                  *layers: Sequence[eqx.Module], 
                  init_fn: Callable = None,
                   ) -> None:
+        """
+        **Arguments**:
+        - `layers`: Sequence containing the equinox modules and snnax stateful layers
+        - `init_fn`: Initialization function for the state of the layer
+        """
         self.layers = layers
         super().__init__(init_fn = init_fn)
         
@@ -132,6 +104,11 @@ class CompoundLayer(StatefulLayer):
     def init_state(self,
                    shape: Union[Sequence[Tuple[int]], Tuple[int]],
                    key: PRNGKey) -> Sequence[Array]:
+        """
+        **Arguments**:
+        - `shape`: Shape of the input data
+        - `key`: JAX PRNGKey
+        """
         states = []
         outs = []           
         keys = jax.random.split(key, len(self.layers))
@@ -166,7 +143,13 @@ class CompoundLayer(StatefulLayer):
     def __call__(self, 
                 state: Union[Array, Sequence[Array]], 
                 synaptic_input: Array, *, 
-                key: Optional[PRNGKey] = None):
+                key: Optional[PRNGKey] = jax.random.PRNGKey(0)) -> Tuple[Sequence, Sequence]:
+        """
+        **Arguments**:
+        - `state`: Sequence containing the state of the compound layer
+        - `synaptic_input`: Synaptic input to the compound layer
+        - `key`: JAX PRNGKey
+        """
         h = synaptic_input
         keys = jax.random.split(key, len(self.layers))
         new_states = []
@@ -185,6 +168,61 @@ class CompoundLayer(StatefulLayer):
                 new_states.append([h])
                 outs.append(h)
         return new_states, outs
+
+class SequentialLocalFeedback(Sequential):
+    """
+    Convenience class to construct a feed-forward spiking neural network with
+    self recurrent connections in a simple manner. It supports the defined
+    StatefulLayer neuron types as well as equinox layers. Under the hood it
+    constructs a connectivity graph with a feed-forward structure and local
+    recurrent connections for each layer and feeds it to the StatefulModel class.
+    In order to obtain the needed recurrence graph, snnax layers must be encapsulated
+    using the CompoundLayer class.
+    """
+
+    def __init__(self, 
+                *layers: Sequence[eqx.Module],
+                forward_fn: Callable = default_forward_fn,
+                feedback_layers = None,
+                ) -> None:
+        """**Arguments**:
+        - `layers`: Sequence containing the layers of the network in causal order.
+        """
+        num_layers = len(list(layers))
+        input_connectivity, input_layer_ids, final_layer_ids = gen_feed_forward_struct(num_layers)
+
+        # Constructing the connectivity graph
+        graph_structure = GraphStructure(
+            num_layers = num_layers,
+            input_layer_ids = input_layer_ids,
+            final_layer_ids = final_layer_ids,
+            input_connectivity = input_connectivity)
+
+        if feedback_layers is None:
+            for i, l in enumerate(layers):
+                input_connectivity[i].append(i)
+        else:
+            for i, (k, l) in enumerate(feedback_layers.items()):
+                input_connectivity[l].append(k)
+
+        StatefulModel.__init__(graph_structure, list(layers), forward_fn = forward_fn)
+
+def gen_feed_forward_struct(num_layers: int) -> Tuple[Sequence[int], Sequence[int], Sequence[int]]:
+    """
+    Function to construct a simple feed-forward connectivity graph from the
+    given number of layers. This means that every layer is just connected to 
+    the next one. 
+    """
+    input_connectivity = [[id] for id in range(-1, num_layers-1)]
+    input_connectivity[0] = []
+    input_layer_ids = [[] for id in range(0, num_layers)]
+    input_layer_ids[0] = [0]
+    final_layer_ids = [num_layers-1]
+    return input_connectivity, input_layer_ids, final_layer_ids
+
+
+
+
 
 
 
