@@ -72,7 +72,7 @@ class SNNMLP(eqx.Module):
         self.cell = snn.composed.SequentialLocalFeedback(
             *layers,
             forward_fn = snn.architecture.default_forward_fn,
-            feedback_layers = {1:1, 2:2, 3:3},) 
+            feedback_layers = None,) 
 
     def __call__(self, x, key=None, seqlen=None):
         if seqlen is not None:
