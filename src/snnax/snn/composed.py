@@ -183,10 +183,18 @@ class SequentialLocalFeedback(Sequential):
     def __init__(self, 
                 *layers: Sequence[eqx.Module],
                 forward_fn: Callable = default_forward_fn,
-                feedback_layers = None,
+                feedback_layers: dict = None,
                 ) -> None:
-        """**Arguments**:
-        - `layers`: Sequence containing the layers of the network in causal order.
+        """
+        **Arguments**:
+        - `layers`: Sequence containing the layers of the network in causal
+        order.
+        - `forward_fn`: forward function used in the scan loop. default forward
+        function default_forward_fn used if not provided
+        - `feedback_layers`: dictionary of which feedback connections to
+        create.  If omitted, all CompoundLayers will be connected to themselves
+        (= local feedback)
+
         """
         num_layers = len(list(layers))
         input_connectivity, input_layer_ids, final_layer_ids = gen_feed_forward_struct(num_layers)
@@ -200,12 +208,16 @@ class SequentialLocalFeedback(Sequential):
 
         if feedback_layers is None:
             for i, l in enumerate(layers):
-                input_connectivity[i].append(i)
+                if isinstance(l, CompoundLayer):
+                    input_connectivity[i].append(i)
         else:
             for i, (k, l) in enumerate(feedback_layers.items()):
                 input_connectivity[l].append(k)
 
-        StatefulModel.__init__(graph_structure, list(layers), forward_fn = forward_fn)
+        StatefulModel.__init__(self,
+                               graph_structure = graph_structure,
+                               layers = list(layers),
+                               forward_fn = forward_fn)
 
 def gen_feed_forward_struct(num_layers: int) -> Tuple[Sequence[int], Sequence[int], Sequence[int]]:
     """
