@@ -62,13 +62,21 @@ class StatefulLayer(eqx.Module):
                 state: Union[Array, Sequence[Array]], 
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = None):
+        '''
+        Outputs:         
+           [state, output passed to next layer]
+        '''
         pass
         
         
 class RequiresStateLayer(eqx.Module):
     """
-    Base class to define custom spiking neuron types.
+    Base class to define custom layers that do not have an internal state, but require the previous layer state to compute the output (e.g. pooling.
     """
     def __call__(self, state):
+        '''
+        Outputs:
+        output_passed_to_next_layer: [Array]
+        '''
         raise NotImplementedError
 

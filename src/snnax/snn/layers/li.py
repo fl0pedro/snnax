@@ -16,10 +16,10 @@ class LI(StatefulLayer):
     integrates over the synaptic inputs.
     """
     # TODO link to which implementation we follow
-    decay_constant: float = static_field()
+    decay_constants: float = static_field()
 
     def __init__(self,
-                decay_constant: float,
+                decay_constants: float,
                 init_fn: Optional[Callable] = None) -> None:
         """**Arguments**:
         - `decay_constants`: Decay constant of the leaky integrator.
@@ -28,13 +28,13 @@ class LI(StatefulLayer):
         """
 
         super().__init__(init_fn)
-        self.decay_constant = decay_constant
+        self.decay_constants = decay_constants
 
     def __call__(self, 
                 state: Array, 
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = None) -> Sequence[Array]:
-        alpha = self.decay_constant
+        alpha = self.decay_constants[0]
         mem_pot = state
         mem_pot = alpha*mem_pot + (1.-alpha)*synaptic_input # TODO with (1-alpha)?
         

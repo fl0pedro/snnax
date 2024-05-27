@@ -72,7 +72,7 @@ class SNNMLP(eqx.Module):
         self.cell = snn.composed.SequentialLocalFeedback(
             *layers,
             forward_fn = snn.architecture.default_forward_fn,
-            feedback_layers = {3:1, 6:4, 9:7},) 
+            feedback_layers = None,) 
 
     def __call__(self, x, key=None, seqlen=None):
         if seqlen is not None:
@@ -113,38 +113,52 @@ class SNNMLP(eqx.Module):
         else:
             return states, out[-1][seqlen-self.burnin,:]
 
+class LinearNonDiag(eqx.nn.Linear):
+    def __call__(self, x: Array, *, key: Optional[PRNGKeyArray] = None) -> Array:
+        if self.in_features == "scalar":
+            if jnp.shape(x) != ():
+                raise ValueError("x must have scalar shape")
+            x = jnp.broadcast_to(x, (1,))
+        x = (self.weight-jnp.diag(self.weight)) @ x
+        if self.bias is not None:
+            x = x + self.bias
+        if self.out_features == "scalar":
+            assert jnp.shape(x) == (1,)
+            x = jnp.squeeze(x)
+        return x
 
 def make_layers(in_channels, hid_channels, out_channels, key, neuron_model, size_factor=1, use_bias=True, num_hid_layers=2, alpha=0.95, beta=.85, norm=False):
-    surr = sr(beta=10.)
+    surr = sr(beta = 10.0)
     shapes = []
     layers = [snn.Flatten()]
     shapes.append(in_channels)
-    for _ in range(num_hid_layers):
+    for i in range(num_hid_layers):
         m = []
         init_key, key = jrandom.split(key,2)
         _out_s = hid_channels*size_factor
-        m.append(eqx.nn.Linear(in_channels + _out_s, _out_s, key=init_key, use_bias=use_bias))
-        shapes.append(in_channels+_out_s)
+        _ff = eqx.nn.Linear(in_channels, _out_s, key=init_key, use_bias=use_bias)
+        _rec = LinearNonDiag(_out_s, _out_s, key=init_key, use_bias=False)
+        m.append(snn.composed.Parallel([_ff,_rec]))
+        shapes.append([in_channels,_out_s])
         if norm:
-            m.append(eqx.nn.LayerNorm(shape=[_out_s],elementwise_affine=False, eps=1e-4))
-            shapes.append(_out_s)
+            m.append(eqx.nn.LayerNorm(shape=(_out_s,), elementwise_affine=False, eps=1e-4))
         m.append(neuron_model(decay_constants = [alpha,beta], 
                               spike_fn=surr, 
                               reset_val=1,
                               shape=[_out_s],
                               key=init_key
                               ))
-        shapes.append(_out_s)
-        layers += m
+        
+        #layers += m
+        layers .append( snn.composed.CompoundLayer(*m))
         in_channels = hid_channels*size_factor
-        print(shapes)
+    print('input dimensions', shapes)
 
     init_key, key = jrandom.split(key,2)
     layers.append(eqx.nn.Linear(hid_channels*size_factor, out_channels, key=key, use_bias=use_bias))
     shapes.append(hid_channels*size_factor)
     print('Debug', len(layers))
     return layers, shapes
-
 
 def _model_init(model):
     ## Custom code ensures that only  conv layers are trained
@@ -164,7 +178,6 @@ def _model_init(model):
     filter_spec = apply_to_tree_leaf_bytype(filter_spec, 'requires_grad', 'data', lambda _: True)
     
     return model, filter_spec
-
 
 def snn_mlp(input_size=[2,32,32], out_channels=10, key = jax.random.PRNGKey(0), **kwargs):
     return _model_init(SNNMLP(in_channels = np.prod(input_size), out_channels=out_channels, key = key, **kwargs))
