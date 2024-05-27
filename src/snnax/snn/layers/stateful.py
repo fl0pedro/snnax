@@ -37,7 +37,7 @@ class StatefulLayer(eqx.Module):
             params = TrainableArray(parameters, requires_grad)
         else:
             if isinstance(parameters[0], Sequence):
-                assert all([d.shape == shape for d in parameters]), \
+                assert all([p.shape == shape for p in parameters]), \
                     "Shape of decay constants does not match the provided shape"
                 params = TrainableArray(_arr, requires_grad)
             else:
