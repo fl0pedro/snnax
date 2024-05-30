@@ -107,6 +107,7 @@ i.e., `out_spikes[-1]`, and sum the spikes across time to get the spike count.
 
 
 .. code-block:: python
+
     # Simple batched loss function
     @partial(jax.vmap, in_axes=(0, 0, 0))
     def loss_fn(in_states, in_spikes, tgt_class):
@@ -131,6 +132,7 @@ using the `init_states` method of the `Sequential` class.
 
 
 .. code-block:: python
+
     # ...
     # Simple training loop
     for in_spikes, tgt_class in tqdm(dataloader):
