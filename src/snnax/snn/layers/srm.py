@@ -12,7 +12,7 @@ from ...functional.surrogate import superspike_surrogate
 
 class SRM(StatefulLayer):
     """
-    TODO
+    Implementation of the Spike Response Model (SRM).
     """
     layer: eqx.Module 
     decay_constants: Union[Sequence[float], jnp.ndarray, TrainableArray]     
@@ -36,20 +36,21 @@ class SRM(StatefulLayer):
                 shape: Union[Sequence[int],int,None] = None,
                 key: jrand.PRNGKey = jax.random.PRNGKey(0),
                 **kwargs) -> None:
-        """**Arguments**:
-        - `input_shape`: Shape of the neuron layer.
-        - `shape`: Shape of the neuron layer.
-        - `decay_constants`: Decay constants for the leaky integrate-and-fire neuron.
-            Index 0 describes the decay constant of the membrane potential,
-            Index 1 describes the decay constant of the synaptic current.
-        - `r_decay_constants`: Decay constants for the refractory period.
-        - `spike_fn`: Spike treshold function with custom surrogate gradient.
-        - `threshold`: Spike threshold for membrane potential. Defaults to 1.
-        - `reset_val`: Reset value after a spike has been emitted. Defaults to None.
-        - `stop_reset_grad`: Boolean to control if the gradient is propagated
-            through the refectory potential.
-        - `init_fn`: Function to initialize the initial state of the spiking neurons.
-            Defaults to initialization with zeros if nothing else is provided.
+        """
+        Arguments:
+            - `input_shape`: Shape of the neuron layer.
+            - `shape`: Shape of the neuron layer.
+            - `decay_constants`: Decay constants for the leaky integrate-and-fire neuron.
+                Index 0 describes the decay constant of the membrane potential,
+                Index 1 describes the decay constant of the synaptic current.
+            - `r_decay_constants`: Decay constants for the refractory period.
+            - `spike_fn`: Spike treshold function with custom surrogate gradient.
+            - `threshold`: Spike threshold for membrane potential. Defaults to 1.
+            - `reset_val`: Reset value after a spike has been emitted. Defaults to None.
+            - `stop_reset_grad`: Boolean to control if the gradient is propagated
+                through the refectory potential.
+            - `init_fn`: Function to initialize the initial state of the spiking neurons.
+                Defaults to initialization with zeros if nothing else is provided.
         """
 
         super().__init__(init_fn)

@@ -12,13 +12,21 @@ from chex import PRNGKey, Array
 
 # TODO callable is missing
 class SigmaDelta(StatefulLayer):
-
+    """
+    Implementation of a Sigma-Delta neuron.
+    """
     threshold: float = static_field()
     spike_fn: Callable = static_field()
     
     def __init__(self, threshold: float = 1., 
                  spike_fn: Callable = superspike_surrogate(10.),
                  init_fn: Optional[Callable]=None):
+        """
+        Arguments:
+            - `threshold` (float): desc
+            - `spike_fn` (Callable): desc
+            - `init_fn` (Callable): desc
+        """
         super().__init__(init_fn)
         self.threshold = threshold
         self.spike_fn = spike_fn

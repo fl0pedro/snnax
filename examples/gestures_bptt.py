@@ -17,7 +17,6 @@ from torch.utils.data import DataLoader
 from snnax.functional import one_hot_cross_entropy
 import equinox as eqx
 
-import tonic
 from tonic.transforms import Compose, Downsample, ToFrame
 
 from utils import calc_accuracy, DVSGestures, RandomSlice
