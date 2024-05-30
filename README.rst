@@ -89,12 +89,24 @@ layers into a feed-forward architecture.
     import equinox as eqx
     import snnax.snn as snn
 
+    import optax
+
     model = snn.Sequential(eqx.Conv2D(2, 32, 7, 2, key=key1),
                             snn.LIF((8, 8), [.9, .8], key=key2),
                             snn.flatten(),
                             eqx.Linear(64, 11, key=key3),
                             snn.LIF(11, [.9, .8], key=key4))
-    # ...
+
+
+Next, we simply define a loss function for a single sample and then use the 
+vectorization features of JAX to create a batched loss function.
+Note that the output of our model is a tuple of membrane potentials and spikes.
+The spike output is a list of spike trains for each layer of the SNN.
+For a feed-forward SNN, we can simply take the last element of the spike list, 
+i.e., `out_spikes[-1]`, and sum the spikes across time to get the spike count.
+
+
+.. code-block:: python
     # Simple batched loss function
     @partial(jax.vmap, in_axes=(0, 0, 0))
     def loss_fn(in_states, in_spikes, tgt_class):
@@ -112,6 +124,13 @@ layers into a feed-forward architecture.
     def loss_and_grad(in_states, in_spikes, tgt_class):
         return jnp.mean(loss_fn(in_states, in_spikes, tgt_class))
 
+
+Finally, we train the model by feeding our model the input spike trains
+and states. For this, we first have to initialize the states of the SNN
+using the `init_states` method of the `Sequential` class.
+
+
+.. code-block:: python
     # ...
     # Simple training loop
     for in_spikes, tgt_class in tqdm(dataloader):
@@ -132,9 +151,21 @@ Fully worked-out examples can be found in the `examples` directory.
 Design Principles
 =================
 
-TODO explain GraphStructure object
+This section gives a short overview about some of the key building blocks in 
+SNNAX and how they are implemented.
 
-TODO explain how recurrence works in snnax
+Structure of a neuron layer
+---------------------------
+
+All custom neuron layers inherit from the `snnax.StatefulLayer` class which is
+just a `eqx.Module` with some additional methods to handle the state of the
+neurons.
+
+
+
+
+How recurrence works in SNNAX
+-----------------------------
 
 
 Citation
