@@ -72,7 +72,7 @@ class Parallel(eqx.Module):
     Convenience class to concatenate layers in a spiking neural network in a
     simple manner. The inputs  provided as a list in the same order as the
     layers are distributed to each layer. The output is the sum of all layers.
-    It supports the defined StatefulLayer neuron types as well as equinox
+    It supports the defined `StatefulLayer` neuron types as well as equinox
     layers. 
     """
     layers: Sequence[eqx.Module]
@@ -105,7 +105,6 @@ class CompoundLayer(StatefulLayer):
     of the compound state.
     
     Example:
-    
     `layers = [eqx.Linear(),
                eqx.LayerNorm(),
                snn.LIF()]

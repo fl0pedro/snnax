@@ -32,11 +32,9 @@
    :width: 200px
    :height: 100px
    :scale: 50 %
-   :align: left
 
 
-
-|SNNAX is a lightweight library for implementing Spiking Neural Networks (SNNs) 
+SNNAX is a lightweight library for implementing Spiking Neural Networks (SNNs) 
 is JAX. It leverages the excellent and intuitive 
 [Equinox Library](https://docs.kidger.site/equinox/).
 The core of SNNAX is a module that stacks layers of pre-defined or custom 
@@ -45,8 +43,6 @@ to call them in a single `lax.scan` loop.
 This mode of operation enables feedback loops across the layers of SNNs, 
 while leveraging GPU/TPU acceleration as much as possible.
 
-
-.. _pyscaffold-notes:
 
 
 Installation
