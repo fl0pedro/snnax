@@ -36,7 +36,7 @@
 
 
 
-SNNAX is a lightweight library for implementing Spiking Neural Networks (SNNs) 
+|SNNAX is a lightweight library for implementing Spiking Neural Networks (SNNs) 
 is JAX. It leverages the excellent and intuitive 
 [Equinox Library](https://docs.kidger.site/equinox/).
 The core of SNNAX is a module that stacks layers of pre-defined or custom 
