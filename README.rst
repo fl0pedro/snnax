@@ -32,8 +32,7 @@
    :width: 200px
    :height: 100px
    :scale: 50 %
-   :alt: alternate text
-   :align: right
+   :align: left
 
 
 SNNAX is a lightweight library for implementing Spiking Neural Networks (SNNs) 
