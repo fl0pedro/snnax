@@ -13,7 +13,30 @@ from chex import PRNGKey, Array
 # TODO callable is missing
 class SigmaDelta(StatefulLayer):
     """
-    Implementation of a Sigma-Delta neuron.
+    Implementation of a Sigma-Delta neuron. A Sigma-Delta neuron consists of a Sigma-Decoder
+    part and a Delta-Encoder part. 
+
+    Sigma-Decoder accumulates the synaptic inputs of the neuron over the timesteps (sigma-value). 
+    
+    Delta-Encoder calculates the current timestep activations using the accumulated spikes by the 
+    Sigma-Decoder and generates the delta-value by taking the difference of current timestep 
+    activations and previous timestep activations. Then previous timestep residue value is added 
+    to generate the delta value which is the difference of delta value and neuron spike outputs 
+    of previous timestep. This delta-value is used to generate the current timestep spike output 
+    of the neuron. The resources are:
+
+    [1]:
+    @article{Nair2019AnUP,
+    title={An Ultra-Low Power Sigma-Delta Neuron Circuit},
+    author={Manu V. Nair and G. Indiveri},
+    journal={2019 IEEE International Symposium on Circuits and Systems (ISCAS)},
+    year={2019},
+    pages={1-5},
+    url={https://api.semanticscholar.org/CorpusID:67771396}
+
+    [2]:
+    https://github.com/lava-nc/lava/blob/main/src/lava/proc/sdn/process.py
+}
     """
     threshold: float = static_field()
     spike_fn: Callable = static_field()
