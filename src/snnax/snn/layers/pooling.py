@@ -14,7 +14,10 @@ class MaxPool1d(eqx.nn.MaxPool1d, RequiresStateLayer):
     spike_fn: Callable[[jnp.ndarray], jnp.ndarray] = static_field()
     threshold: Union[float, jnp.ndarray] = static_field()
     
-    def __init__(self, *args, spike_fn = superspike_surrogate(10.0), threshold = 1.0, **kwargs, ):
+    def __init__(self, 
+                *args, 
+                spike_fn = superspike_surrogate(10.0), 
+                threshold = 1.0, **kwargs) -> None:
         self.threshold = threshold
         
         self.spike_fn = spike_fn
@@ -33,7 +36,10 @@ class MaxPool2d(eqx.nn.MaxPool2d, RequiresStateLayer):
     spike_fn: Callable[[jnp.ndarray], jnp.ndarray] = static_field()
     threshold: Union[float, jnp.ndarray] = static_field()
     
-    def __init__(self, *args, spike_fn = superspike_surrogate(10.0), threshold = 1.0, **kwargs, ):
+    def __init__(self, 
+                *args, 
+                spike_fn = superspike_surrogate(10.0), 
+                threshold = 1.0, **kwargs) -> None:
         self.threshold = threshold
         
         self.spike_fn = spike_fn

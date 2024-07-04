@@ -9,6 +9,10 @@ from equinox import static_field
 from chex import Array, PRNGKey
 
 
+SpikeFn = Callable[[Array], Array]
+StateShape = Union[Sequence[int], int]
+# InitFn = Callable TODO define this correctly
+
 class TrainableArray(eqx.Module):
     data: Array
     requires_grad: bool
@@ -37,8 +41,8 @@ class StatefulLayer(eqx.Module):
             params = TrainableArray(parameters, requires_grad)
         else:
             if isinstance(parameters[0], Sequence):
-                assert all([d.shape == shape for d in parameters]), \
-                    "Shape of decay constants does not match the provided shape"
+                assert all([p.shape == shape for p in parameters]), \
+                    "Shape of decay constants does not match the provided shape!"
                 params = TrainableArray(_arr, requires_grad)
             else:
                 _arr = jnp.array([jnp.ones(shape, dtype=jnp.float32)*d for d in parameters])
@@ -62,21 +66,23 @@ class StatefulLayer(eqx.Module):
                 state: Union[Array, Sequence[Array]], 
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = None):
-        '''
+        """
         Outputs:         
            [state, output passed to next layer]
-        '''
+        """
         pass
         
         
 class RequiresStateLayer(eqx.Module):
     """
-    Base class to define custom layers that do not have an internal state, but require the previous layer state to compute the output (e.g. pooling.
+    TODO check if this is obsolete
+    Base class to define custom layers that do not have an internal state, 
+    but require the previous layer state to compute the output (e.g. pooling).
     """
     def __call__(self, state):
-        '''
+        """
         Outputs:
         output_passed_to_next_layer: [Array]
-        '''
+        """
         raise NotImplementedError
 

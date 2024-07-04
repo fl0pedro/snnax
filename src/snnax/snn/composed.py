@@ -8,22 +8,45 @@ from .layers.stateful import StatefulLayer, RequiresStateLayer
 from .architecture import StatefulModel, GraphStructure, default_forward_fn
 
 
+ConnectivityStructure = Tuple[Sequence[int], Sequence[int], Sequence[int]]
+
+
+def gen_feed_forward_struct(num_layers: int) -> ConnectivityStructure:
+    """
+    Function to construct a simple feed-forward connectivity graph from the
+    given number of layers. This means that every layer is just connected to 
+    the next one. 
+    """
+    input_connectivity = [[id] for id in range(-1, num_layers-1)]
+    input_connectivity[0] = []
+    input_layer_ids = [[] for id in range(0, num_layers)]
+    input_layer_ids[0] = [0]
+    final_layer_ids = [num_layers-1]
+    return input_connectivity, input_layer_ids, final_layer_ids
+
+
 class Sequential(StatefulModel):
     """
     Convenience class to construct a feed-forward spiking neural network in a
-    simple manner. It supports the defined StatefulLayer neuron types as well 
-    as equinox layers. Under the hood it constructs a connectivity graph 
-    with a feed-forward structure and feeds it to the StatefulModel class.
+    simple manner. It supports the defined `StatefulLayer` neuron types as well 
+    as Equinox layers. It constructs a connectivity graph with a `feed-forward` 
+    structure and feeds it to the StatefulModel class.
+    
+    Arguments:
+        - `layers` (Sequence[eqx.Module]): Sequence containing the layers of the 
+            network in causal order.
+        - `forward_fn` (Callable): Forward function used in the `lax.scan` loop 
+            to propagate the information through the feed-forward network. 
+            The default forward function `default_forward_fn` is used if not 
+            provided.
     """
 
     def __init__(self, 
                 *layers: Sequence[eqx.Module],
                 forward_fn: Callable = default_forward_fn) -> None:
-        """**Arguments**:
-        - `layers`: Sequence containing the layers of the network in causal order.
-        """
         num_layers = len(list(layers))
-        input_connectivity, input_layer_ids, final_layer_ids = gen_feed_forward_struct(num_layers)
+        conn = gen_feed_forward_struct(num_layers)
+        input_connectivity, input_layer_ids, final_layer_ids = conn
 
         # Constructing the connectivity graph
         graph_structure = GraphStructure(
@@ -43,12 +66,13 @@ class Sequential(StatefulModel):
     def __call__(self, state, data, key, **kwargs) -> Tuple[Sequence, Sequence]:
         return super().__call__(state, data, key, **kwargs)
 
+
 class Parallel(eqx.Module):
     """
     Convenience class to concatenate layers in a spiking neural network in a
     simple manner. The inputs provided as a list in the same order as the
     layers are distributed to each layer. The output is the sum of all layers.
-    It supports the defined StatefulLayer neuron types as well as equinox
+    It supports the defined `StatefulLayer` neuron types as well as equinox
     layers. 
     """
     layers: Sequence[eqx.Module]
@@ -63,7 +87,7 @@ class Parallel(eqx.Module):
         """
         self.layers = layers
 
-    def __call__(self, inputs, key: PRNGKey = jax.random.PRNGKey(0)):
+    def __call__(self, inputs, key: Optional[PRNGKey] = None):
         """
         **Arguments**:
         - `inputs`: Sequence containing the inputs to each layer
@@ -72,20 +96,20 @@ class Parallel(eqx.Module):
         h = [l(x) for l,x in zip(self.layers, inputs)]
         return sum(h)
 
+
 class CompoundLayer(StatefulLayer):
-    '''
+    """
     This class that groups together several Equinox modules. This 
     is useful for convieniently addressing compound layers as a single one.
     It is essentially like an equinox module but with the proper handling 
     of the compound state.
     
     Example:
-    
     `layers = [eqx.Linear(),
                eqx.LayerNorm(),
                snn.LIF()]
     compound_layer = CompoundLayer(*layers)`
-    '''
+    """
 
     layers: Sequence[eqx.Module]
     def __init__(self,
@@ -169,6 +193,7 @@ class CompoundLayer(StatefulLayer):
                 outs.append(h)
         return new_states, outs
 
+
 class SequentialLocalFeedback(Sequential):
     """
     Convenience class to construct a feed-forward spiking neural network with
@@ -221,33 +246,4 @@ class SequentialLocalFeedback(Sequential):
                                graph_structure = graph_structure,
                                layers = list(layers),
                                forward_fn = forward_fn)
-
-def gen_feed_forward_struct(num_layers: int) -> Tuple[Sequence[int], Sequence[int], Sequence[int]]:
-    """
-    Function to construct a simple feed-forward connectivity graph from the
-    given number of layers. This means that every layer is just connected to 
-    the next one. 
-
-    **Arguments**:
-    - `num_layers`: Number of layers in the network
-    """
-    input_connectivity = [[id] for id in range(-1, num_layers-1)]
-    input_connectivity[0] = []
-    input_layer_ids = [[] for id in range(0, num_layers)]
-    input_layer_ids[0] = [0]
-    final_layer_ids = [num_layers-1]
-    return input_connectivity, input_layer_ids, final_layer_ids
-
-
-
-
-
-
-
-
-
-
-
- 
-
 
