@@ -74,7 +74,6 @@ def default_forward_fn(layers: Sequence[eqx.Module],
         
         inputs   = jnp.concatenate(inputs  , axis=0)
         inputs_v = jnp.concatenate(inputs_v, axis=0)
-
         # Check if layer is a StatefulLayer
         if isinstance(layer, StatefulLayer):
             new_state, new_out  = layer(state, inputs, key=key)
@@ -239,7 +238,6 @@ class StatefulModel(eqx.Module):
 
     def init_state(self, 
                    in_shape: Union[Sequence[Tuple[int]], Tuple[int]], 
-                   shapes: Union[Sequence[Tuple[int]], None],
                    key: PRNGKey) -> Sequence[Array]:
         """
         Init function that recursively calls the init functions of the stateful
@@ -248,7 +246,6 @@ class StatefulModel(eqx.Module):
         
         Arguments:
             - `in_shape`: GraphStructure object to specify network topology.
-
             - `key`: Computational building blocks of the model.
         Output:
         """
@@ -256,31 +253,27 @@ class StatefulModel(eqx.Module):
         states, outs = [], []
         struct = self.graph_structure
 
-        if not isinstance(in_shape, Sequence):
+        if not isinstance(in_shape, list):
             in_shape_0 = [in_shape]
         else:
             in_shape_0 = in_shape
-        
+
         for ilayer, (key, layer) in enumerate(zip(keys, self.layers)):
             # Grab output from nodes for which the connectivity graph 
             # specifies a connection
-            inputs = []
-            for id in struct.input_connectivity[ilayer]:
-                if id<ilayer:
-                    inputs = inputs+[outs[id]]
+            inputs = [outs[id] for id in struct.input_connectivity[ilayer]]
             
             # If the node is also a input layer, also append external input
             external_inputs = [jnp.zeros(in_shape_0[id]) for id in struct.input_layer_ids[ilayer]]
             inputs += external_inputs
 
             inputs = jnp.concatenate(inputs, axis=0)
+            # print('in_shape: ', in_shape)
             # Check if layer is a StatefulLayer
-            if shapes is not None: 
-                in_shape = shapes[ilayer] 
             if isinstance(layer, StatefulLayer):
                 state = layer.init_state(shape = in_shape, key = key)
                 out = layer.init_out(shape = in_shape, key = key)
-                if shapes is None: in_shape = out.shape
+                in_shape = out.shape
                 states.append(state)
                 outs.append(out)
             # This allows the usage of modules from equinox
@@ -288,15 +281,12 @@ class StatefulModel(eqx.Module):
             elif isinstance(layer, RequiresStateLayer):
                 mock_input = jnp.zeros(in_shape)
                 out = layer(mock_input)
-                if shapes is None: in_shape = out.shape
+                in_shape = out.shape
                 states.append([out])
                 outs.append(out)
             elif isinstance(layer, eqx.Module):
-                if shapes is None:
-                    out = layer(inputs, key=key)
-                    in_shape = out.shape
-                else:
-                    out = layer(jnp.zeros(in_shape), key=key)
+                out = layer(inputs, key=key)
+                in_shape = out.shape
                 states.append([out])
                 outs.append(out)
             else:
