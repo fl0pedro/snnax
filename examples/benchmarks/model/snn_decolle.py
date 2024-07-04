@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Tue 28 Mar 2023 12:21:33 PM CEST
-# Last Modified : Fri 19 Apr 2024 11:16:40 AM CEST
+# Last Modified : Thu 04 Jul 2024 11:37:27 AM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
@@ -88,7 +88,7 @@ class SNNDECOLLE(eqx.Module):
         )
 
     def __call__(self, x, key=None):
-        state = self.cell.init_state(x[0,:].shape, key)
+        state = self.cell.init_state(in_shape=[x[0,:].shape], key=key)
 
         state, out = self.cell(state, x, key, burnin=self.burnin)
         if self.ro_int == -1:

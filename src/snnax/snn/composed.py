@@ -46,7 +46,7 @@ class Sequential(StatefulModel):
 class Parallel(eqx.Module):
     """
     Convenience class to concatenate layers in a spiking neural network in a
-    simple manner. The inputs  provided as a list in the same order as the
+    simple manner. The inputs provided as a list in the same order as the
     layers are distributed to each layer. The output is the sum of all layers.
     It supports the defined StatefulLayer neuron types as well as equinox
     layers. 
@@ -103,7 +103,7 @@ class CompoundLayer(StatefulLayer):
 
     def init_state(self,
                    shape: Union[Sequence[Tuple[int]], Tuple[int]],
-                   key: PRNGKey) -> Sequence[Array]:
+                   key: Optional[PRNGKey] = jax.random.PRNGKey(0)) -> Sequence[Array]:
         """
         **Arguments**:
         - `shape`: Shape of the input data
@@ -176,8 +176,11 @@ class SequentialLocalFeedback(Sequential):
     StatefulLayer neuron types as well as equinox layers. Under the hood it
     constructs a connectivity graph with a feed-forward structure and local
     recurrent connections for each layer and feeds it to the StatefulModel class.
-    In order to obtain the needed recurrence graph, snnax layers must be encapsulated
-    using the CompoundLayer class.
+
+    Important: By default, when feedback_layers is None, only CompoundLayer are 
+    recurrently connected to themselves. If you want to connect other layers to
+    themselves, you need to provide a dictionary with the layer indices as keys
+    and the feedback layer indices as values.
     """
 
     def __init__(self, 
@@ -224,6 +227,9 @@ def gen_feed_forward_struct(num_layers: int) -> Tuple[Sequence[int], Sequence[in
     Function to construct a simple feed-forward connectivity graph from the
     given number of layers. This means that every layer is just connected to 
     the next one. 
+
+    **Arguments**:
+    - `num_layers`: Number of layers in the network
     """
     input_connectivity = [[id] for id in range(-1, num_layers-1)]
     input_connectivity[0] = []

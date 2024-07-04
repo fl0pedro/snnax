@@ -15,7 +15,7 @@ from functools import partial
 from typing import *
 from typing import Callable,Type
 from typing import Sequence
-from jaxtyping import Array, Bool, Float, PyTree
+from jaxtyping import Array, Bool, Float, PyTree, PRNGKeyArray
 from typing import List, Union
 from jax.random import PRNGKey
 import functools as ft

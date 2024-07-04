@@ -33,10 +33,10 @@ class GraphStructure(NamedTuple):
 
 
 def default_forward_fn(layers: Sequence[eqx.Module], 
-                        struct: GraphStructure, 
-                        key: PRNGKey,
-                        states: Sequence[Array], 
-                        data: Sequence[Array]) -> Tuple:
+                       struct: GraphStructure, 
+                       key: PRNGKey,
+                       states: Sequence[Array], 
+                       data: Sequence[Array]) -> Tuple:
     """
     Computes the forward pass (via jax.lax.scan) through the layers in a straight-through manner,
     i.e. every layer takes the input from the last layer at the same time step.
@@ -239,6 +239,12 @@ class StatefulModel(eqx.Module):
                 layers: Sequence[eqx.Module],
                 forward_fn: Callable = default_forward_fn) -> None:
         super().__init__()
+        """
+        **Arguments**:
+        graph_structure: GraphStructure object to specify network topology.
+        layers: A sequence of equinox modules
+        forward_fn: Evaluation procedure/loop for the model. Defaults to `default_forward_fn`.
+        """
 
         self.graph_structure = graph_structure
         self.layers = layers
@@ -248,17 +254,18 @@ class StatefulModel(eqx.Module):
         assert len(self.graph_structure.input_connectivity) == self.graph_structure.num_layers
 
     def init_state(self, 
-                   in_shape: Union[Sequence[Tuple[int]], Tuple[int]], 
-                   shapes: Union[Sequence[Tuple[int]], None] = None,
-                   key: PRNGKey = jax.random.PRNGKey(0)) -> Sequence[Array]:
+                   in_shape: Union[Sequence[Tuple[int]], Tuple[int]],                    
+                   key: PRNGKey = jax.random.PRNGKey(0),
+                   shapes: Union[Sequence[Tuple[int]], None] = None,) -> Sequence[Array]:
         """
         Init function that recursively calls the init functions of the stateful
         layers. Non-stateful layers are initialized as None and their output
         shape is computed using a mock input.
         
         **Arguments**:
-            - `in_shape`: GraphStructure object to specify network topology.
+            - `in_shape`: Shape of the input data, provided as a list of lists.
             - `key`: Computational building blocks of the model.
+            - `shapes`: Shape of the output data, provided as a list of lists. If None, the output shape is computed using a mock input.
 
         **Output**:
             - `states`: initial state of the model.
@@ -322,6 +329,13 @@ class StatefulModel(eqx.Module):
                 input_batch,
                 key: jrand.PRNGKey,
                 burnin: int = 0) -> Tuple:
+        """
+        **Arguments**:
+        - `input_states`: Initial state of the model, provided as a list of jax numpy arrays.
+        - `input_batch`: Input data of the model.
+        - `key`: Random key for the forward pass.
+        - `burnin`: Number of time steps to run the model without computing gradients.
+        """
         # Partial initialization of the forward function
         forward_fn = ft.partial(self.forward_fn, 
                                 self.layers, 

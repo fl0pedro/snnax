@@ -4,7 +4,7 @@
 # Author: Emre Neftci
 #
 # Creation Date : Tue 28 Mar 2023 03:15:53 PM CEST
-# Last Modified : Tue 23 Apr 2024 10:00:52 PM CEST
+# Last Modified : Thu 04 Jul 2024 11:56:43 AM CEST
 #
 # Copyright : (c) Emre Neftci, PGI-15 Forschungszentrum Juelich
 # Licence : GPLv2
@@ -84,7 +84,7 @@ class spVGG(eqx.Module):
             return jax.vmap(self.classifier)(feat.reshape(feat.shape[0],-1), key = _key)
 
     def embed(self, x, key=None):
-        state = self.cell.init_state(x[0,:].shape, key)
+        state = self.cell.init_state([ x[0,:].shape ], key = key)
         state, out = self.cell(state, x, key, burnin=self.burnin)
 
         if self.ro_int is None:
@@ -98,7 +98,7 @@ class spVGG(eqx.Module):
     
     def get_final_states(self, x, key):
         #For the moment only return the output of cell, bypassing the avg adaptive pooling
-        state = self.cell.init_state(x[0,:].shape, key)
+        state = self.cell.init_state([x[0,:].shape], key = key)
 
         states, out = self.cell(state, x, key, burnin=self.burnin)
         return states, out
