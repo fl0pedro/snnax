@@ -238,7 +238,7 @@ class StatefulModel(eqx.Module):
         - `graph_structure`: GraphStructure object to specify network topology.
         - `layers`: Computational building blocks of the model.
         - `forward_fn`: Evaluation procedure/loop for the model. 
-                        Defaults to backprop through time using lax.scan().
+                        Defaults to `default_forward_fn`.
     """
     graph_structure: GraphStructure = static_field()
     layers: Sequence[eqx.Module]
