@@ -10,6 +10,10 @@ from ...functional.surrogate import superspike_surrogate
 class MaxPool1d(eqx.nn.MaxPool1d, RequiresStateLayer):
     """
     Simple module to flatten the output of a layer.
+
+    Arguments:
+        - `spike_fn` (Callable): Surrogate function for the spiking neuron
+        - `threshold` (float): Threshold for the spiking neuron
     """
     spike_fn: Callable[[jnp.ndarray], jnp.ndarray] = static_field()
     threshold: Union[float, jnp.ndarray] = static_field()
@@ -18,6 +22,11 @@ class MaxPool1d(eqx.nn.MaxPool1d, RequiresStateLayer):
                 *args, 
                 spike_fn = superspike_surrogate(10.0), 
                 threshold = 1.0, **kwargs) -> None:
+        """	
+        Arguments:
+            - `spike_fn` (Callable): Surrogate function for the spiking neuron
+            - `threshold` (float): Threshold for the spiking neuron
+        """
         self.threshold = threshold
         
         self.spike_fn = spike_fn
@@ -32,6 +41,10 @@ class MaxPool1d(eqx.nn.MaxPool1d, RequiresStateLayer):
 class MaxPool2d(eqx.nn.MaxPool2d, RequiresStateLayer):
     """
     Simple module to flatten the output of a layer.
+
+    Arguments:
+        - `spike_fn` (Callable): Surrogate function for the spiking neuron
+        - `threshold` (float): Threshold for the spiking neuron
     """
     spike_fn: Callable[[jnp.ndarray], jnp.ndarray] = static_field()
     threshold: Union[float, jnp.ndarray] = static_field()
@@ -40,6 +53,11 @@ class MaxPool2d(eqx.nn.MaxPool2d, RequiresStateLayer):
                 *args, 
                 spike_fn = superspike_surrogate(10.0), 
                 threshold = 1.0, **kwargs) -> None:
+        """
+        Arguments:
+            - `spike_fn` (Callable): Surrogate function for the spiking neuron
+            - `threshold` (float): Threshold for the spiking neuron
+        """
         self.threshold = threshold
         
         self.spike_fn = spike_fn

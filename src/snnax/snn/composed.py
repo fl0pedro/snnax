@@ -31,6 +31,14 @@ class Sequential(StatefulModel):
     simple manner. It supports the defined `StatefulLayer` neuron types as well 
     as Equinox layers. It constructs a connectivity graph with a `feed-forward` 
     structure and feeds it to the StatefulModel class.
+
+    Example:
+    ```python
+    layers = [eqx.Linear(),
+               eqx.LayerNorm(),
+               snn.LIF()]
+    feed_forward = Sequential(*layers)
+    ```
     
     Arguments:
         - `layers` (Sequence[eqx.Module]): Sequence containing the layers of the 
@@ -74,24 +82,37 @@ class Parallel(eqx.Module):
     layers are distributed to each layer. The output is the sum of all layers.
     It supports the defined `StatefulLayer` neuron types as well as equinox
     layers. 
+
+    Example:
+    ```python
+    layers = [eqx.Linear(),
+               eqx.LayerNorm(),
+               snn.LIF()]
+    parallel_layer = Parallel(layers)
+    ```
+
+    Arguments:
+        - `layers` (Sequence[eqx.Module]): Sequence containing the layers of the 
+            network in causal order. The output dimensions of layers must be 
+            broadcastable to the same shape under a sum operation.
     """
     layers: Sequence[eqx.Module]
 
     def __init__(self, layers):
         """
-        **Arguments**:
-        - `layers`: Sequence containing the equinox modules and snnax stateful
-          models of the network order. The order used must be the same as the
-          order used in the __call__ function. The output dimensions of layers
-          must be broadcastable to the same shape under a sum operation.
+        Arguments:
+            - `layers`: Sequence containing the equinox modules and snnax stateful
+                models of the network order. The order used must be the same as the
+                order used in the __call__ function. The output dimensions of layers
+                must be broadcastable to the same shape under a sum operation.
         """
         self.layers = layers
 
     def __call__(self, inputs, key: Optional[PRNGKey] = None):
         """
-        **Arguments**:
-        - `inputs`: Sequence containing the inputs to each layer
-        - `key`: JAX PRNGKey
+        Arguments:
+            - `inputs`: Sequence containing the inputs to each layer
+            - `key`: JAX PRNGKey
         """
         h = [l(x) for l,x in zip(self.layers, inputs)]
         return sum(h)
@@ -100,15 +121,21 @@ class Parallel(eqx.Module):
 class CompoundLayer(StatefulLayer):
     """
     This class that groups together several Equinox modules. This 
-    is useful for convieniently addressing compound layers as a single one.
+    is useful for conveniently addressing compound layers as a single one.
     It is essentially like an equinox module but with the proper handling 
     of the compound state.
     
     Example:
-    `layers = [eqx.Linear(),
+    ```python
+    layers = [eqx.Linear(),
                eqx.LayerNorm(),
                snn.LIF()]
-    compound_layer = CompoundLayer(*layers)`
+    compound_layer = CompoundLayer(*layers)
+    ```
+
+    Arguments:
+        - `layers` (Sequence[eqx.Module]): Sequence containing the layers of the 
+            network in causal order.
     """
 
     layers: Sequence[eqx.Module]
@@ -117,9 +144,9 @@ class CompoundLayer(StatefulLayer):
                  init_fn: Callable = None,
                   ) -> None:
         """
-        **Arguments**:
-        - `layers`: Sequence containing the equinox modules and snnax stateful layers
-        - `init_fn`: Initialization function for the state of the layer
+        Arguments:
+            - `layers`: Sequence containing the equinox modules and snnax stateful layers
+            - `init_fn`: Initialization function for the state of the layer
         """
         self.layers = layers
         super().__init__(init_fn = init_fn)
@@ -129,9 +156,9 @@ class CompoundLayer(StatefulLayer):
                    shape: Union[Sequence[Tuple[int]], Tuple[int]],
                    key: Optional[PRNGKey] = jax.random.PRNGKey(0)) -> Sequence[Array]:
         """
-        **Arguments**:
-        - `shape`: Shape of the input data
-        - `key`: JAX PRNGKey
+        Arguments:
+            - `shape`: Shape of the input data
+            - `key`: JAX PRNGKey
         """
         states = []
         outs = []           
@@ -169,10 +196,10 @@ class CompoundLayer(StatefulLayer):
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = jax.random.PRNGKey(0)) -> Tuple[Sequence, Sequence]:
         """
-        **Arguments**:
-        - `state`: Sequence containing the state of the compound layer
-        - `synaptic_input`: Synaptic input to the compound layer
-        - `key`: JAX PRNGKey
+        Arguments:
+            - `state`: Sequence containing the state of the compound layer
+            - `synaptic_input`: Synaptic input to the compound layer
+            - `key`: JAX PRNGKey
         """
         h = synaptic_input
         keys = jax.random.split(key, len(self.layers))
@@ -206,6 +233,15 @@ class SequentialLocalFeedback(Sequential):
     recurrently connected to themselves. If you want to connect other layers to
     themselves, you need to provide a dictionary with the layer indices as keys
     and the feedback layer indices as values.
+
+    Example:
+    ```python
+    layers = [eqx.Linear(),
+               eqx.LayerNorm(),
+               snn.LIF()]
+    feedback_layers = {1: 0}
+    local_feedback = SequentialLocalFeedback(*layers, feedback_layers=feedback_layers)
+    ```
     """
 
     def __init__(self, 
@@ -214,14 +250,14 @@ class SequentialLocalFeedback(Sequential):
                 feedback_layers: dict = None,
                 ) -> None:
         """
-        **Arguments**:
-        - `layers`: Sequence containing the layers of the network in causal
-        order.
-        - `forward_fn`: forward function used in the scan loop. default forward
-        function default_forward_fn used if not provided
-        - `feedback_layers`: dictionary of which feedback connections to
-        create.  If omitted, all CompoundLayers will be connected to themselves
-        (= local feedback)
+        Arguments:
+            - `layers`: Sequence containing the layers of the network in causal
+            order.
+            - `forward_fn`: forward function used in the scan loop. default forward
+            function default_forward_fn used if not provided
+            - `feedback_layers`: dictionary of which feedback connections to
+            create.  If omitted, all CompoundLayers will be connected to themselves
+            (= local feedback)
 
         """
         num_layers = len(list(layers))

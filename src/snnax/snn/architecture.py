@@ -222,13 +222,23 @@ class StatefulModel(eqx.Module):
     Class that allows the creation of custom SNNs with almost arbitrary 
     connectivity defined through a graph structure called the connectivity graph.
     Has to inherit from eqx.Module to be a callable pytree.
+
+    Example:
+    ```python
+    graph_structure = graph = snn.GraphStructure(3, [[0], [], []], [2], [[], [0], [1]])
+    layers = [eqx.Linear(),
+               eqx.LayerNorm(),
+               snn.LIF()]
+
+    model = StatefulModel(graph_structure=graph_structure,
+                            layers=layers)
+    ```
     
     Arguments:
         - `graph_structure`: GraphStructure object to specify network topology.
         - `layers`: Computational building blocks of the model.
         - `forward_fn`: Evaluation procedure/loop for the model. 
                         Defaults to backprop through time using lax.scan().
-    Output:
     """
     graph_structure: GraphStructure = static_field()
     layers: Sequence[eqx.Module]
@@ -240,10 +250,10 @@ class StatefulModel(eqx.Module):
                 forward_fn: Callable = default_forward_fn) -> None:
         super().__init__()
         """
-        **Arguments**:
-        graph_structure: GraphStructure object to specify network topology.
-        layers: A sequence of equinox modules
-        forward_fn: Evaluation procedure/loop for the model. Defaults to `default_forward_fn`.
+        Arguments:
+            - `graph_structure`: GraphStructure object to specify network topology.
+            - `layers`: A sequence of equinox modules
+            - `forward_fn`: Evaluation procedure/loop for the model. Defaults to `default_forward_fn`.
         """
 
         self.graph_structure = graph_structure
@@ -262,12 +272,12 @@ class StatefulModel(eqx.Module):
         layers. Non-stateful layers are initialized as None and their output
         shape is computed using a mock input.
         
-        **Arguments**:
+        Arguments:
             - `in_shape`: Shape of the input data, provided as a list of lists.
             - `key`: Computational building blocks of the model.
             - `shapes`: Shape of the output data, provided as a list of lists. If None, the output shape is computed using a mock input.
 
-        **Output**:
+        Output:
             - `states`: initial state of the model.
 
         """
@@ -330,11 +340,15 @@ class StatefulModel(eqx.Module):
                 key: jrand.PRNGKey,
                 burnin: int = 0) -> Tuple:
         """
-        **Arguments**:
-        - `input_states`: Initial state of the model, provided as a list of jax numpy arrays.
-        - `input_batch`: Input data of the model.
-        - `key`: Random key for the forward pass.
-        - `burnin`: Number of time steps to run the model without computing gradients.
+        Arguments:
+            - `input_states`: Initial state of the model, provided as a list of jax numpy arrays.
+            - `input_batch`: Input data of the model.
+            - `key`: Random key for the forward pass.
+            - `burnin`: Number of time steps to run the model without computing gradients.
+
+        Output:
+            - `new_states`: Updated state of the model.
+            - `new_outs`: Output of the model.
         """
         # Partial initialization of the forward function
         forward_fn = ft.partial(self.forward_fn, 

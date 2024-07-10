@@ -27,16 +27,20 @@ class SigmaDelta(StatefulLayer):
 
     [1]:
     @article{Nair2019AnUP,
-    title={An Ultra-Low Power Sigma-Delta Neuron Circuit},
-    author={Manu V. Nair and G. Indiveri},
-    journal={2019 IEEE International Symposium on Circuits and Systems (ISCAS)},
-    year={2019},
-    pages={1-5},
-    url={https://api.semanticscholar.org/CorpusID:67771396}
+        title={An Ultra-Low Power Sigma-Delta Neuron Circuit},
+        author={Manu V. Nair and G. Indiveri},
+        journal={2019 IEEE International Symposium on Circuits and Systems (ISCAS)},
+        year={2019},
+        pages={1-5},
+        url={https://api.semanticscholar.org/CorpusID:67771396}
 
-    [2]:
-    https://github.com/lava-nc/lava/blob/main/src/lava/proc/sdn/process.py
-}
+        [2]:
+        https://github.com/lava-nc/lava/blob/main/src/lava/proc/sdn/process.py
+    }
+
+    Arguments:
+        - `threshold` (float): Threshold for the neuron to emit a spike.
+        - `spike_fn` (Callable): Spike threshold function with custom surrogate gradient.
     """
     threshold: float = static_field()
     spike_fn: Callable = static_field()

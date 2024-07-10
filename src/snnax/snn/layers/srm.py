@@ -13,6 +13,17 @@ from ...functional.surrogate import superspike_surrogate
 class SRM(StatefulLayer):
     """
     Implementation of the Spike Response Model (SRM).
+
+    Arguments:
+        - `layer` (eqx.Module): Layer to be used in the SRM.
+        - `decay_constants` (Union[Sequence[float], jnp.ndarray, TrainableArray]): Decay constants for the leaky integrate-and-fire neuron.
+            Index 0 describes the decay constant of the membrane potential,
+            Index 1 describes the decay constant of the synaptic current.
+        - `r_decay_constants` (Union[Sequence[float], jnp.ndarray, TrainableArray]): Decay constants for the refractory period.
+        - `threshold` (Union[float, jnp.ndarray]): Spike threshold for membrane potential. Defaults to 1.
+        - `spike_fn` (Callable): Spike threshold function with custom surrogate gradient.
+        - `reset_val` (Optional[Union[float, jnp.ndarray, TrainableArray]]): Reset value after a spike has been emitted. Defaults to None.
+        - `stop_reset_grad` (bool): Boolean to control if the gradient is propagated through the refectory potential.
     """
     layer: eqx.Module 
     decay_constants: Union[Sequence[float], jnp.ndarray, TrainableArray]     
@@ -38,8 +49,7 @@ class SRM(StatefulLayer):
                 **kwargs) -> None:
         """
         Arguments:
-            - `input_shape`: Shape of the neuron layer.
-            - `shape`: Shape of the neuron layer.
+            - `layer`: Layer to be used in the SRM.
             - `decay_constants`: Decay constants for the leaky integrate-and-fire neuron.
                 Index 0 describes the decay constant of the membrane potential,
                 Index 1 describes the decay constant of the synaptic current.
@@ -51,6 +61,8 @@ class SRM(StatefulLayer):
                 through the refectory potential.
             - `init_fn`: Function to initialize the initial state of the spiking neurons.
                 Defaults to initialization with zeros if nothing else is provided.
+            - `input_shape`: Shape of the neuron layer.
+            - `shape`: Shape of the neuron layer.
         """
 
         super().__init__(init_fn)

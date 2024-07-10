@@ -18,10 +18,22 @@ import snnax.snn as snn
 # snn.ResNetBlock(kernel_dims=[[in_channels, out_channels, kernel_size, stride, padding], [in_features, out_features]]) --> one conv, one linear layer
 
 class ResNetBlock(eqx.Module):
+    """
+    ResNet block composed of a sequence of layers.
 
+    Arguments:
+        - `layers`: Sequence containing the equinox modules and snnax stateful layers
+    """
     layers: Sequence[eqx.Module]
 
     def __init__(self, layer_order: Sequence, layer_params: Sequence, stateful_layer_type: str='LIF', key=None):
+        """
+        Arguments:
+            - `layer_order`: Sequence containing the layer order of the ResNet block
+            - `layer_params`: Sequence containing the parameters of the layers
+            - `stateful_layer_type`: Type of the stateful layer to be used
+        """
+
         # layer_order = ['c', 'c', 'l']
         # layer_params = [  [in_channels, out_channels, kernel_size, stride, padding],    [in_channels, out_channels, kernel_size, stride, padding],    [in_features, out_features] ].
         super().__init__()

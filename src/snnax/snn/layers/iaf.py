@@ -17,6 +17,14 @@ class SimpleIAF(StatefulLayer):
     which does not make explicit use of synaptic currents.
     It integrates the raw synaptic input without any decay.
     Requires one constant to simulate constant membrane potential leak.
+
+    Arguments:
+        - `leak` (float): Leak of the membrane potential.
+        - `threshold` (float): Threshold for the membrane potential to emit a spike.
+        - `spike_fn` (Callable): Spike threshold function with custom surrogate gradient.
+        - `stop_reset_grad` (bool): Boolean to control if the gradient is propagated
+                                through the refectory potential.
+        - `reset_val` (Optional[float]): Reset value after a spike has been emitted.
     """
     leak: float = static_field()
     threshold: float = static_field()
@@ -60,6 +68,12 @@ class SimpleIAF(StatefulLayer):
                 state: Array, 
                 synaptic_input: Array, *, 
                 key: Optional[PRNGKey] = None) -> Sequence[jnp.ndarray]:
+        """
+        Arguments:
+            - `state`: State of the spiking neurons.
+            - `synaptic_input`: Synaptic input to the neurons.
+            - `key`: JAX PRNGKey.
+        """
 
         mem_pot = state
         mem_pot = (mem_pot-self.leak) + synaptic_input
@@ -82,6 +96,17 @@ class IAF(StatefulLayer):
     """
     Implementation of an integrate-and-fire neuron with a constant leak
     or no leak at all. However, it has no leak by default.
+
+    Arguments:
+        - `decay_constants` (Union[Sequence[float], Array]): Decay constants for the IAF neuron.
+            - Index 0 describes the decay constant of the membrane potential,
+            - Index 1 describes the decay constant of the synaptic current.
+        - `leak` (float): Leak of the membrane potential.
+        - `threshold` (float): Threshold for the membrane potential to emit a spike.
+        - `spike_fn` (Callable): Spike threshold function with custom surrogate gradient.
+        - `stop_reset_grad` (bool): Boolean to control if the gradient is propagated
+                                through the refectory potential.
+        - `reset_val` (Optional[float]): Reset value after a spike has been emitted.
     """
     decay_constants: Union[Sequence[float], Array] = static_field()
     leak: float = static_field()

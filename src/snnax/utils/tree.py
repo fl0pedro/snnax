@@ -14,10 +14,10 @@ def apply_to_tree_leaf(pytree: PyTree,
     Apply a function all leaves in the given pytree with the given identifier.
     To simply replace values, use `replace_fn=lambda _: value`
     
-    **Arguments**
-    - `pytree`: The pytree where we want to modify the leaves.
-    - `identifier`: A string used to identify the name/field of the leaves.
-    - `replace_fn`: Callable which is applied to the leaf values.
+    Arguments:
+        - `pytree`: The pytree where we want to modify the leaves.
+        - `identifier`: A string used to identify the name/field of the leaves.
+        - `replace_fn`: Callable which is applied to the leaf values.
     """
     _has_identifier = lambda leaf: hasattr(leaf, identifier) and getattr(leaf, identifier) is not None
     def _identifier(pytree):
@@ -37,10 +37,10 @@ def apply_to_tree_leaf_bytype(pytree: PyTree,
     Apply a function all leaves in the given pytree with the given identifier.
     To simply replace values, use `replace_fn=lambda _: value`
     
-    **Arguments**
-    - `pytree`: The pytree where we want to modify the leaves.
-    - `identifier`: A string used to identify the name/field of the leaves.
-    - `replace_fn`: Callable which is applied to the leaf values.
+    Arguments:
+        - `pytree`: The pytree where we want to modify the leaves.
+        - `identifier`: A string used to identify the name/field of the leaves.
+        - `replace_fn`: Callable which is applied to the leaf values.
     """
     _has_identifier = lambda leaf: (type(leaf) == typ) and hasattr(leaf, identifier)
     def _identifier(pytree):

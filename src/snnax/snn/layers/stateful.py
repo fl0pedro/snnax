@@ -14,10 +14,22 @@ StateShape = Union[Sequence[int], int]
 # InitFn = Callable TODO define this correctly
 
 class TrainableArray(eqx.Module):
+    """
+    Wrapper class for trainable arrays.
+
+    Arguments:
+        - `data` (Array): Data of the trainable array.
+        - `requires_grad` (bool): Whether the array requires gradients.
+    """
     data: Array
     requires_grad: bool
 
     def __init__(self, data: Array, requires_grad: bool = True):
+        """
+        Arguments:
+            - `data` (Array): Data of the trainable array.
+            - `requires_grad` (bool): Whether the array requires gradients.
+        """
         self.data = data
         self.requires_grad = requires_grad
 
@@ -25,10 +37,19 @@ class TrainableArray(eqx.Module):
 class StatefulLayer(eqx.Module):
     """
     Base class to define custom spiking neuron types.
+
+    Arguments:
+        - `init_fn` (Callable): Function to initialize the initial state of the spiking neurons.
+            Defaults to initialization with zeros if nothing else is provided.
     """
     init_fn: Callable = static_field()
 
     def __init__(self, init_fn: Callable = None):
+        """
+        Arguments:
+            - `init_fn`: Function to initialize the initial state of the spiking neurons.
+                Defaults to initialization with zeros if nothing else is provided.
+        """
         if init_fn is None:
             init_fn = lambda x, key, *args, **kwargs: jnp.zeros(x)
         self.init_fn = init_fn

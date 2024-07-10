@@ -14,12 +14,27 @@ from chex import Array, PRNGKey
 
 
 class BatchNormLayer(eqx.Module):
+    """	
+    Batch normalization layer for spiking neural networks.
+
+    Arguments:
+        - `eps` (float): Epsilon value to avoid division by zero.
+        - `forget_weight` (float): Forgetting weight for the moving mean and variance.
+        - `gamma` (float): Scaling factor for the normalized input.
+    """
+
 
     gamma: float
     forget_weight: float = static_field()
     eps: float = static_field()
 
     def __init__(self, eps: Union[float, int], forget_weight: Union[float, int], gamma: Union[float, int] = 0.8):
+        """
+        Arguments:
+            - `eps` (float): Epsilon value to avoid division by zero.
+            - `forget_weight` (float): Forgetting weight for the moving mean and variance.
+            - `gamma` (float): Scaling factor for the normalized input.
+        """
         super().__init__()
         self.eps = eps
         self.forget_weight = forget_weight
@@ -35,7 +50,6 @@ class BatchNormLayer(eqx.Module):
         return jnp.zeros(input_shape), jnp.zeros(input_shape)
     
     def __call__(self, input_data, moving_mean, moving_var, key: Optional[PRNGKey] = None):
-        
         mean = lax.pmean(input_data, axis_name="batch_axis")
         var = lax.pmean((input_data - mean) ** 2, axis_name="batch_axis")
 

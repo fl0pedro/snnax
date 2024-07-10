@@ -14,6 +14,9 @@ class LI(StatefulLayer):
     """
     Implementation of a simple Leaky Itegrator (LI) neuron layer which 
     integrates over the synaptic inputs.
+
+    Arguments:
+        - `decay_constants` (float): Decay constant of the leaky integrator.
     """
     # TODO link to which implementation we follow
     decay_constants: float = static_field()
