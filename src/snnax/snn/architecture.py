@@ -276,6 +276,7 @@ class StatefulModel(eqx.Module):
         struct = self.graph_structure
 
         if not isinstance(in_shape, Sequence):
+            #need to check for sequence of sequence
             in_shape_0 = [in_shape]
         else:
             in_shape_0 = in_shape
@@ -311,12 +312,13 @@ class StatefulModel(eqx.Module):
                     in_shape = out.shape
                 states.append([out])
                 outs.append(out)
-            elif isinstance(layer, eqx.Module):
+            elif isinstance(layer, eqx.Module) and not isinstance(layer, StatefulLayer):
                 if shapes is None:
                     out = layer(inputs, key=key)
                     in_shape = out.shape
                 else:
                     out = layer(jnp.zeros(in_shape), key=key)
+                    in_shape = out.shape
                 states.append([out])
                 outs.append(out)
             else:

@@ -164,6 +164,42 @@ class CompoundLayer(StatefulLayer):
 
         return states
 
+    def init_out(self, 
+            shape: Union[int, Sequence[int]], *, 
+            key: Optional[PRNGKey] = None):
+
+        states = []
+        outs = []           
+        keys = jax.random.split(key, len(self.layers))
+        for ilayer, (key, layer) in enumerate(zip(keys, self.layers)):
+            # Check if layer is a StatefulLayer
+            if isinstance(layer, StatefulLayer):
+                state = layer.init_state(shape = shape, key = key)
+                out = layer.init_out(shape = shape, key = key)
+                states.append(state)
+                outs.append(out)
+            # This allows the usage of modules from equinox
+            # by calculating the output shape with a mock input
+            elif isinstance(layer, RequiresStateLayer):
+                mock_input = jax.numpy.zeros(shape)
+                out = layer(mock_input)
+                states.append([out])
+                outs.append(out)
+            elif isinstance(layer, Parallel):
+                out = layer([jax.numpy.zeros(s) for s in shape], key=key)
+                states.append([out])
+                outs.append(out)
+            elif isinstance(layer, eqx.Module):
+                out = layer(jax.numpy.zeros(shape), key=key)
+                states.append([out])
+                outs.append(out)
+            else:
+                raise ValueError(f"Layer of type {type(layer)} not supported!")
+            shape = out.shape
+        return out
+
+    # The initial ouput of the layer. Initialize as an array of zeros.
+
     def __call__(self, 
                 state: Union[Array, Sequence[Array]], 
                 synaptic_input: Array, *, 
