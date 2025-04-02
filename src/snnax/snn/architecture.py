@@ -134,7 +134,7 @@ def delayed_forward_fn(layers: Sequence[eqx.Module],
     """
     keys = jrand.split(key, len(layers))
     new_states, new_outs = [], []
-    snn_states, outs = carry
+    snn_states, outs = carry # TODO: ValueError, bad carry logic.
 
     batch = batch if isinstance(batch, Sequence) else [batch]
 
