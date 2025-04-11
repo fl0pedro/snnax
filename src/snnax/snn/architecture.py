@@ -124,47 +124,47 @@ def default_forward_fn(layers: Sequence[eqx.Module],
 def delayed_forward_fn(layers: Sequence[eqx.Module], 
                         struct: GraphStructure, 
                         key: PRNGKey,
-                        carry: Tuple[Sequence[Array], Sequence[Array]], 
-                        batch) -> ForwardFnOutput:
-    """TODO add docstring
-    This class contains meta-information about the computational graph.
-    It can be used in conjunction with the StatefulModel class to construct 
-    a computational model.
-
+                        states: Sequence[Array], 
+                        data: Sequence[Array]) -> ForwardFnOutput:
+    """
+    Forward function that allows delayed connections, where outputs from the
+    current time step can be used as inputs for other layers in the same time step.
+    
     Arguments:
-        `num_layers`: Specifies the number of layers we want to have in our model.
-        `input_layer_ids`: Specifies which layers are provided with external input
-        `input_connectivity`: Specifies how the layers are connected to each other. 
+        `layers`: Specifies layers in our model.
+        `struct`: Specifies graph structure
+        `states`: States as returned by init_state 
+        `data`: Input Sequence data of the model.
+        `key`: Random key for the forward pass.
     """
     keys = jrand.split(key, len(layers))
     new_states, new_outs = [], []
-    snn_states, outs = carry # TODO: ValueError, bad carry logic.
+    
+    data = data if isinstance(data, Sequence) else [data]
 
-    batch = batch if isinstance(batch, Sequence) else [batch]
-
-    for layer_id, (key, state, layer) in enumerate(zip(keys, snn_states, layers)):
-        # Grab output from nodes for which 
-        # the connectivity graph specifies a connection
-        inputs = [outs[id] for id in struct.input_connectivity[layer_id]]
-
-        # If the node is also a input layer, also append external input
-        external_inputs = [batch[id] for id in struct.input_layer_ids[layer_id]]
+    for layer_id, (key, state, layer) in enumerate(zip(keys, states, layers)):
+        inputs = []
+        for id in struct.input_connectivity[layer_id]:
+            if id < len(new_outs):  # Check if we've already computed this output
+                inputs.append(new_outs[id])
+        
+        # If the node is also an input layer, also append external input
+        external_inputs = [data[id] for id in struct.input_layer_ids[layer_id]]
         inputs += external_inputs
 
         inputs = jnp.concatenate(inputs, axis=-1)
 
-        # Check if node is a StatefulLayer
+        # Check if layer is a StatefulLayer
         if isinstance(layer, StatefulLayer):
-            state, out  = layer(state, inputs, key=key)
-            new_states.append(state)
+            new_state, out = layer(state, inputs, key=key)
+            new_states.append(new_state)
             new_outs.append(out)
         else:
             out = layer(inputs, key=key)
-            new_states.append(None)
+            new_states.append([out])  # Match the structure used in default_forward_fn
             new_outs.append(out)
 
-    new_carry = (new_states, new_outs)
-    return new_carry, new_outs
+    return new_states, new_outs
 
 
 class StatefulModel(eqx.Module):
