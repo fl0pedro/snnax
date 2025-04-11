@@ -78,21 +78,25 @@ def default_forward_fn(layers: Sequence[eqx.Module],
             inputs.append(batch)
             inputs_v.append(batch)
 
-		# TODO suboptimal solution below, won't generalize to "deeper"" states
+        # TODO: Make a frozen dataclass or labeled tuple for the input of the states.
+        #   It is confusing and can easily lead to errors by having a required structure for tuples without labels
+        
+        def get_inputs(states: Sequence[Array]):
+            if isinstance(states[-1], Sequence):
+                get_inputs(states[-1])
+            else:
+                inputs.append(states[-1])
+                inputs_v.append(states[0])
 
         for layer_id in struct.input_connectivity[ilayer]:
-            if type(states[layer_id][-1]) == list:
-                inputs.append(states[layer_id][-1][-1])
-                inputs_v.append(states[layer_id][-1][0])
-            else:
-                inputs.append(states[layer_id][-1])
-                inputs_v.append(states[layer_id][-1])
+            get_inputs(states[layer_id])
 
         # If the layer also gets external input append it as well
         external_inputs = [data[id] for id in struct.input_layer_ids[ilayer]]
         inputs += external_inputs
         inputs_v += external_inputs
         
+        # NOTE: this array can only concatonate if each input are of equal shape.
         if len(inputs) == 1:
             inputs = jnp.concatenate(inputs, axis=0)
         inputs_v = jnp.concatenate(inputs_v, axis=0)
@@ -257,14 +261,14 @@ class StatefulModel(eqx.Module):
 
     def __call__(self, 
                 input_states: Sequence[Array], 
-                input_batch,
-                key: PRNGKey,
+                input_batch, 
+                key: PRNGKey, 
                 burnin: int = 0) -> Tuple:
         # Partial initialization of the forward function
         forward_fn = ft.partial(self.forward_fn, 
                                 self.layers, 
                                 self.graph_structure,
-                                key)       
+                                key)
         
         if burnin > 0:
             new_states, new_outs = self.loop_fn(forward_fn, 
@@ -279,5 +283,5 @@ class StatefulModel(eqx.Module):
             new_states, new_outs = self.loop_fn(forward_fn, 
                                                 input_states, 
                                                 input_batch)
-        return new_states, new_outs         
+        return new_states, new_outs
 
