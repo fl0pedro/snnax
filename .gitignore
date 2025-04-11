@@ -6,3 +6,5 @@ intro.py
 **/build/
 .coverage*
 /src/**/snnax.egg-info
+.idea
+uv.lock
