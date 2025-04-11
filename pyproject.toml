@@ -24,6 +24,10 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "chex>=0.1.89",
+    "equinox>=0.12.1",
+]
 
 [project.urls]
 Homepage = "https://github.com/PGI15/snnax"
