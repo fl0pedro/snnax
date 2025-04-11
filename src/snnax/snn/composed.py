@@ -28,8 +28,8 @@ class Sequential(StatefulModel):
                 *layers: Sequence[eqx.Module],
                 forward_fn: ForwardFn = default_forward_fn) -> None:
         num_layers = len(list(layers))
-        input_layer_ids = [(0,)] + [()]*(num_layers-1)
-        input_connectivity = [()] + [(id,) for id in range(num_layers-1)]
+        input_layer_ids = tuple([(0,)] + [()]*(num_layers-1))
+        input_connectivity = tuple([()] + [(id,) for id in range(num_layers-1)])
         graph_struct = GraphStructure(num_layers, input_layer_ids, input_connectivity)
 
         super().__init__(graph_struct, list(layers), forward_fn = forward_fn)

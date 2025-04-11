@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import jax.random as jrand
 
 import snnax.snn as snn
-from snnax.snn.composed import gen_feed_forward_struct, default_forward_fn
+from snnax.snn.composed import Sequential
 
 
 def test_mlp():
@@ -16,8 +16,7 @@ def test_mlp():
         nn.Linear(16, 16, use_bias=False, key=keys[0]),
         snn.LIF([.95, .85], shape=(16,), key=keys[1]),
         nn.Linear(16, 2, use_bias=False, key=keys[2]),
-        snn.LIF([.95, .85], shape=(2,), key=keys[3]),
-        forward_fn=default_forward_fn
+        snn.LIF([.95, .85], shape=(2,), key=keys[3])
     )
 
     input_spikes = jrand.uniform(key, (32, time_steps, 16))
@@ -44,7 +43,6 @@ def test_convnet():
         snn.Flatten(),
         nn.Linear(16 * 3 * 3, 5, use_bias=False, key=keys[4]),
         snn.LIF([.95, .85], shape=(5,), key=keys[5]),
-        forward_fn=default_forward_fn
     )
 
     input_spikes = jrand.uniform(key, (32, time_steps, 3, 7, 7))
@@ -56,12 +54,14 @@ def test_convnet():
     assert out[0].shape == (32, time_steps, 5)
 
 
-def test_gen_feed_forward_struct():
+def test_feed_forward_struct():
     num_layers = 6
-    graph_struct = gen_feed_forward_struct(num_layers)
 
-    assert graph_struct.input_layer_ids == ((0,), (), (), (), (), ())
-    assert graph_struct.input_connectivity == ((), (0,), (1,), (2,), (3,), (4,))
+    layers = [eqx.Module()]*num_layers
+    model = Sequential(*layers)
+
+    assert model.graph_structure.input_layer_ids == ((0,), (), (), (), (), ())
+    assert model.graph_structure.input_connectivity == ((), (0,), (1,), (2,), (3,), (4,))
 
 def test_compound_layer():
     pass
