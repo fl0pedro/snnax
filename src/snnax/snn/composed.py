@@ -12,25 +12,6 @@ from .layers import StatefulLayer, RequiresStateLayer
 from .layers.stateful import StateShape
 
 
-def gen_feed_forward_struct(num_layers: int) -> GraphStructure:
-    """
-    Function to construct a simple feed-forward connectivity graph from the
-    given number of layers. This means that every layer is just connected to 
-    the next one. 
-
-    Arguments:
-        `num_layers` (int): Number of layers in the network.
-    
-    Returns:
-        `GraphStructure`: Tuple that contains the input connectivity and input layer ids.
-    """
-    input_connectivity = [tuple([id]) for id in range(-1, num_layers-1)]
-    input_connectivity[0] = tuple([])
-    input_layer_ids = [tuple([]) for _ in range(0, num_layers)]
-    input_layer_ids[0] = tuple([0])
-    return GraphStructure(num_layers, tuple(input_layer_ids), tuple(input_connectivity))
-
-
 class Sequential(StatefulModel):
     """
     Convenience class to construct a feed-forward spiking neural network in a
@@ -47,7 +28,9 @@ class Sequential(StatefulModel):
                 *layers: Sequence[eqx.Module],
                 forward_fn: ForwardFn = default_forward_fn) -> None:
         num_layers = len(list(layers))
-        graph_struct = gen_feed_forward_struct(num_layers)
+        input_layer_ids = [(0,)] + [()]*(num_layers-1)
+        input_connectivity = [()] + [(id,) for id in range(num_layers-1)]
+        graph_struct = GraphStructure(num_layers, input_layer_ids, input_connectivity)
 
         super().__init__(graph_struct, list(layers), forward_fn = forward_fn)
 
@@ -217,8 +200,6 @@ class SequentialLocalFeedback(Sequential):
         graph_structure = gen_feed_forward_struct(num_layers)
         input_connectivity = [list(i) for i in graph_structure.input_connectivity]
         input_layer_ids = [list(i) for i in graph_structure.input_layer_ids ]
-
-
 
         # TODO this is shown to be dead-end code. Fix linting or replace...
         if feedback_layers is None:
